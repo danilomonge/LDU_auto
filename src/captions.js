@@ -45,77 +45,208 @@ function pick(list, seed) {
   return list[h % list.length];
 }
 
-// 200 closers per bucket (10 lead-ins × 20 clauses), formal tone, no emoji —
-// the only emoji in the whole caption is the fixed ⚪️🔴 header marker.
-const cartesian = (leadIns, clauses) => leadIns.flatMap((a) => clauses.map((b) => `${a}, ${b}`));
-
-// Lead-ins are pure tone-setters (no specific claim), so they combine
-// cleanly with any clause in their bucket — chosen to share no root word
-// with their clause bank, avoiding "Con respeto, se respeta..." repeats.
-const FIXTURE_LEADINS = [
-  'Con confianza', 'Con calma', 'Con determinación', 'Con humildad', 'Con respeto',
-  'Con paciencia', 'Con enfoque', 'Con actitud', 'Con seriedad', 'Con convicción',
-];
-const FIXTURE_CLAUSES = [
-  'vamos por los tres puntos.', 'el equipo sale a ganar.', 'toca sumar de a tres.',
-  'la hinchada no falla.', 'se juega para ganar.', 'cada partido es una final.',
-  'no hay margen para relajarse.', 'vamos con toda la garra.', 'el objetivo está claro.',
-  'se juega de igual a igual.', 'la cancha dirá el resto.', 'vamos paso a paso.',
-  'el equipo está listo.', 'se juega hasta el final.', 'toca hacer respetar la camiseta.',
-  'vamos por el triunfo.', 'la meta no cambia: ganar.', 'se sale a competir sin miedo.',
-  'cada punto cuenta desde ya.', 'vamos Liga.',
-];
-
-const WIN_LEADINS = [
-  'Con orgullo', 'Con satisfacción', 'Con alegría', 'Con humildad', 'Con gratitud',
-  'Con confianza', 'Con ilusión', 'Con la frente en alto', 'Con el trabajo bien hecho', 'Con espíritu ganador',
-];
-const WIN_CLAUSES = [
-  'se disfruta el triunfo.', 'el esfuerzo dio sus frutos.', 'el equipo respondió en la cancha.',
-  'se suma un triunfo más.', 'la hinchada sale feliz.', 'se avanza en la tabla.',
-  'el esfuerzo se refleja en el resultado.', 'cada punto cuenta, y este se festeja.', 'la Liga sigue firme.',
-  'vamos por más.', 'se celebra con altura.', 'el equipo dejó todo en la cancha.',
-  'la victoria se construyó en equipo.', 'sigue la buena racha.', 'el aguante de siempre se hizo sentir.',
-  'el marcador refleja el esfuerzo.', 'vamos con todo por el próximo.', 'se disfruta como se debe.',
-  'el equipo creció con este triunfo.', 'vamos por más triunfos así.',
+// The banks are original lines built from real LDU hinchada motifs (Ponciano,
+// Casa Blanca, viejo amigo, guambra, Centrales, Rey de Copas), without copying
+// full chants. The generated closer is deterministic but can vary across tens
+// of thousands of natural two-line combinations.
+const CORE_HEART_LINES = [
+  'Como te quiero, mi viejo amigo.',
+  'Otra vez contigo, Liga querida.',
+  'Mi viejo amigo, hoy volvemos a estar.',
+  'Liga de mi vida, una vez más.',
+  'Esto de Liga no se explica, se siente.',
+  'Desde guambra con la blanca en el pecho.',
+  'Desde que me acuerdo, siempre Liga.',
+  'Hay amores que no se discuten.',
+  'Mi corazón sabe de qué lado está.',
+  'La U no se suelta nunca.',
+  'Qué lindo es volver a pensarte todo el día.',
+  'Albo querido, acá estamos otra vez.',
+  'Una vida entera aprendiendo a quererte.',
+  'La camiseta blanca no se mira de lejos.',
+  'Con Liga se sufre, se canta y se vuelve.',
+  'No es costumbre: es pertenencia.',
+  'No es solo fútbol cuando juega Liga.',
+  'Hay cosas que se heredan sin explicación.',
+  'Liga es ese amor que vuelve cada semana.',
+  'A veces alegría, a veces bronca, siempre Liga.',
+  'Lo nuestro con Liga viene de lejos.',
+  'Donde esté Liga, algo se mueve adentro.',
+  'Esta locura alba no pide permiso.',
+  'La semana cambia cuando juega la U.',
+  'En esta casa se habla en blanco, rojo y azul.',
 ];
 
-const DRAW_LEADINS = [
-  'Con calma', 'Con paciencia', 'Con humildad', 'Con respeto', 'Con confianza',
-  'Con serenidad', 'Con constancia', 'Con templanza', 'Con autocrítica', 'Con la mirada al frente',
-];
-const DRAW_CLAUSES = [
-  'se suma, aunque no alcanzó.', 'el equipo sigue en la pelea.', 'se corrigen detalles para el próximo.',
-  'un punto también cuenta.', 'la Liga sigue firme.', 'se trabaja para el próximo partido.',
-  'no se pierde de vista el objetivo.', 'el esfuerzo estuvo, faltó un poco más.', 'se avanza, aunque sea de a poco.',
-  'toca seguir sumando.', 'el punto también suma.', 'la hinchada sigue de pie.',
-  'el próximo partido es la revancha.', 'se sigue en carrera.', 'no se relaja la exigencia.',
-  'cada punto suma para el objetivo.', 'se aprende de cada partido.', 'la Liga no se rinde.',
-  'vamos por los tres en el próximo.', 'se sigue trabajando en equipo.',
-];
-
-const LOSS_LEADINS = [
-  'Con la frente en alto', 'Con respeto', 'Con humildad', 'Con calma', 'Con confianza',
-  'Con paciencia', 'Con serenidad', 'Con autocrítica', 'Con esperanza', 'Con el apoyo de siempre',
-];
-const LOSS_CLAUSES = [
-  'se levanta la cabeza y se sigue.', 'el equipo se repone y sigue.', 'se corrigen los errores.',
-  'la hinchada no suelta la mano.', 'la Liga sigue firme.', 'toca revertir el momento.',
-  'no se bajan los brazos.', 'el próximo partido es la oportunidad.', 'el esfuerzo se reconoce igual.',
-  'se sigue creyendo en el equipo.', 'un mal resultado no define la temporada.', 'se trabaja para el próximo desafío.',
-  'la hinchada sigue de pie.', 'se aprende y se sigue adelante.', 'el equipo no baja los brazos.',
-  'toca reponerse cuanto antes.', 'la Liga vuelve más fuerte.', 'se sigue de pie, siempre.',
-  'no se pierde la fe en el equipo.', 'vamos por la revancha.',
+const PLACE_AND_HISTORY_LINES = [
+  'Ponciano no es cualquier cancha.',
+  'La Casa Blanca tiene memoria.',
+  'Quito sabe cuando juega Liga.',
+  'El Rey de Copas no vive de apodos; los defiende.',
+  'Esta camiseta se hizo grande con noches así.',
+  'En Ponciano se aprende a querer distinto.',
+  'La U tiene historia y la historia exige.',
+  'La blanca pesa porque atrás hay vida.',
+  'La casona guarda alegrías que no se olvidan.',
+  'Ser albo también es saber esperar.',
+  'Centrales de nombre, albos de corazón.',
+  'Liga no necesita gritar para pesar.',
+  'El escudo ya habla antes del pitazo.',
+  'Cada partido trae su propio nudo en la garganta.',
+  'La historia no entra a la cancha, pero empuja.',
 ];
 
-const FIXTURE_CLOSERS = cartesian(FIXTURE_LEADINS, FIXTURE_CLAUSES); // 200
+const FIXTURE_LINES = [
+  'Que ruede la pelota y que hable la camiseta.',
+  'Hoy toca jugar con memoria y presente.',
+  'Ponciano sabe lo que pesa esta camiseta.',
+  'Que la Casa Blanca empuje desde el primer minuto.',
+  'Partido para entrar serios y salir más albos.',
+  'Hoy no alcanza con estar: toca competir.',
+  'Que se sienta Quito cuando salga Liga.',
+  'Con fe, con cabeza y con el pecho albo.',
+  'A jugar como pide la historia.',
+  'La previa ya se vive con nervios de Liga.',
+  'Que sea una de esas tardes que se quedan.',
+  'La cancha espera, la hinchada también.',
+  'Hoy hay que responderle al escudo.',
+  'Que el rival sepa dónde está parado.',
+  'La pelota dirá, pero el aliento ya está.',
+  'A Ponciano se va con fe y exigencia.',
+  'No importa el torneo: importa la camiseta.',
+  'Que sea con carácter, como manda Liga.',
+  'Hoy se vuelve a prender el corazón albo.',
+  'Vamos por otra alegría, sin vender humo.',
+  'Partido a partido, como se vive esto.',
+  'Que Liga haga lo suyo y la gente lo de siempre.',
+  'Desde temprano ya se siente distinto.',
+  'Hoy la blanca tiene que hablar fuerte.',
+  'Que el equipo entre sabiendo lo que representa.',
+];
+
+const WIN_LINES = [
+  'Así se vuelve a casa con el pecho lleno.',
+  'Triunfo de esos que se gritan distinto.',
+  'Tres puntos y una sonrisa bien alba.',
+  'Ganó Liga y la semana respira mejor.',
+  'Cuando gana la U, todo pesa menos.',
+  'Esto también es Liga: sufrir, empujar, ganar.',
+  'La alegría tiene nombre y juega de blanco.',
+  'Se disfruta, porque también costaba.',
+  'Victoria para abrazar al viejo amigo.',
+  'Qué lindo dormir con Liga ganando.',
+  'La Casa Blanca sabe celebrar estas noches.',
+  'Tres puntos para seguir creyendo con calma.',
+  'Orgullo albo, sin perder la cabeza.',
+  'Ganó Liga y Ponciano lo sabe.',
+  'Hoy la camiseta respondió.',
+  'Una alegría más para esta locura.',
+  'Se ganó como se tenía que ganar.',
+  'Esto se festeja con memoria y humildad.',
+  'Partido trabajado, alegría completa.',
+  'La U hizo lo suyo y el corazón también.',
+  'Ganar con Liga nunca se vuelve rutina.',
+  'Qué lindo verte ganar, viejo amigo.',
+  'Triunfo para los que siempre están.',
+  'Otra página chica, otro orgullo grande.',
+  'Se festeja porque Liga importa.',
+];
+
+const DRAW_LINES = [
+  'No alcanza, pero acá nadie se baja.',
+  'Punto con bronca, camiseta intacta.',
+  'Faltaron detalles; sobró aliento.',
+  'Se suma, se corrige y se vuelve.',
+  'Empatar con Liga deja ganas de más.',
+  'La exigencia también es parte del amor.',
+  'No era lo que queríamos, pero seguimos.',
+  'Hay que mejorar, porque Liga obliga.',
+  'La hinchada acompaña, pero también exige.',
+  'Punto que sabe a tarea pendiente.',
+  'Queda bronca; queda Liga.',
+  'No se festeja, se analiza y se sigue.',
+  'El viejo amigo merecía más hoy.',
+  'A levantar la cabeza sin conformarse.',
+  'La camiseta pide otra respuesta.',
+  'Esto no termina acá; Liga nunca se mira de lejos.',
+  'Hoy faltó cerrar lo que se peleó.',
+  'La fe sigue, la vara también.',
+  'Se vuelve con el alma medio cruzada.',
+  'Hay empates que dejan trabajo para la semana.',
+  'A esta historia se le pide más.',
+  'No nos vamos felices, nos vamos presentes.',
+  'El camino sigue y la exigencia también.',
+  'Cuando no alcanza, toca hablar en la cancha.',
+  'Liga merece más, y por eso duele.',
+];
+
+const LOSS_LINES = [
+  'Duele porque Liga importa.',
+  'Hoy pesa, mañana se vuelve.',
+  'Se acompaña, pero se exige.',
+  'La camiseta no permite acostumbrarse a perder.',
+  'Bronca alba, amor intacto.',
+  'A Liga no se la deja en una mala noche.',
+  'Perder con esta camiseta siempre tiene que doler.',
+  'Toca mirarse de frente y responder.',
+  'No hay frase linda para esto: hay que mejorar.',
+  'La hinchada está, la respuesta tiene que venir.',
+  'Viejo amigo, hoy duele; igual acá estamos.',
+  'La historia pide reacción.',
+  'Esto se levanta jugando, no hablando.',
+  'En las malas también se demuestra quién está.',
+  'No se abandona, pero tampoco se tapa.',
+  'A corregir rápido, porque Liga exige.',
+  'La bronca también es amor por la camiseta.',
+  'Que este golpe sirva para despertar.',
+  'Hoy nos vamos golpeados, no ausentes.',
+  'La U merece una respuesta a la altura.',
+  'Cuando Liga cae, el pecho queda pesado.',
+  'No se negocia el apoyo; tampoco la exigencia.',
+  'Otra vez tocará volver y empujar.',
+  'Hay derrotas que solo se curan respondiendo.',
+  'Que duela, y que se note en el próximo.',
+];
+
+function buildCloserBank(statusLines) {
+  const identity = /\b(Liga|alb[ao]s?|Casa Blanca|Ponciano|camiseta|viejo amigo|La U|Centrales|Rey de Copas|blanca)\b/i;
+  return CORE_HEART_LINES.flatMap((heart) =>
+    statusLines.flatMap((status) =>
+      ['', ...PLACE_AND_HISTORY_LINES].map((place) =>
+        [heart, status, place].filter(Boolean).join('\n')
+      )
+    )
+  ).filter((line) => identity.test(line));
+}
+
+const STANDINGS_LINES = [
+  'La tabla se mira con calma y exigencia.',
+  'El campeonato se define partido a partido.',
+  'La tabla habla, pero la cancha decide.',
+  'Cada punto de esta tabla costó lo suyo.',
+  'Se sigue el campeonato con la vara alta.',
+  'Arriba se llega jugando, no mirando.',
+  'La pelea por el título no da respiro.',
+  'Esta tabla todavía tiene mucho por escribir.',
+  'Los números acompañan, el aliento empuja.',
+  'Fecha a fecha, la tabla toma forma.',
+];
+
+const FIXTURE_CLOSERS = buildCloserBank(FIXTURE_LINES); // 10,000
 const RESULT_CLOSERS = {
-  win: cartesian(WIN_LEADINS, WIN_CLAUSES), // 200
-  draw: cartesian(DRAW_LEADINS, DRAW_CLAUSES), // 200
-  loss: cartesian(LOSS_LEADINS, LOSS_CLAUSES), // 200
+  win: buildCloserBank(WIN_LINES), // 10,000
+  draw: buildCloserBank(DRAW_LINES), // 10,000
+  loss: buildCloserBank(LOSS_LINES), // 10,000
+};
+const STANDINGS_CLOSERS = buildCloserBank(STANDINGS_LINES); // 4,000
+
+export const captionClosersForTest = {
+  fixture: FIXTURE_CLOSERS,
+  win: RESULT_CLOSERS.win,
+  draw: RESULT_CLOSERS.draw,
+  loss: RESULT_CLOSERS.loss,
 };
 
-export function buildCaption(postType, match) {
+export function buildCaption(postType, match, extras = null) {
   const comp = COMPETITION_TYPES[match.competitionType] || COMPETITION_TYPES.otra;
   const rival = match.home.id === TEAM_ID ? match.away : match.home;
   const verb = match.lduIsHome ? 'recibe a' : 'visita a';
@@ -146,10 +277,38 @@ export function buildCaption(postType, match) {
     loss: '⚪️🔴 Liga cayó.',
   }[outcome];
   const venue = match.venue ? `\n🏟️ ${match.venue}` : '';
+  // LDU goalscorers (from the ESPN match summary), when available.
+  const lduScorers = (match.lduIsHome ? extras?.scorers?.home : extras?.scorers?.away) || [];
+  const goals = lduScorers.length
+    ? `\n⚽️ ${lduScorers
+        .map((s) => `${s.name}${s.og ? ' (AG)' : s.pen ? ' (P)' : ''} ${s.minutes.join(' ')}`)
+        .join(' · ')}`
+    : '';
   const closer = pick(RESULT_CLOSERS[outcome], match.id);
   return (
     `${opener} ${score}\n${comp.label}` +
+    goals +
     venue +
     `\n\n${closer}\n\n${comp.hashtags}`
+  );
+}
+
+// Caption for the "tabla de posiciones" post. Deterministic per table state,
+// so re-generating the same table is byte-identical.
+export function buildStandingsCaption(standings, teamId = TEAM_ID) {
+  const ldu = standings.entries.find((e) => e.team.id === teamId);
+  const round = ldu?.played ?? Math.max(...standings.entries.map((e) => e.played));
+  const leader = standings.entries[0];
+  const lines = [`⚪️🔴 Así está la tabla de la LigaPro tras la fecha ${round}.`];
+  if (ldu) {
+    lines.push(`📊 LDU: ${ldu.rank}.º con ${ldu.points} puntos (${ldu.played} PJ, ${ldu.goalDiff} DG).`);
+    if (ldu.rank !== 1 && leader) {
+      lines.push(`🔝 Líder: ${cleanName(leader.team.shortName)} con ${leader.points} puntos.`);
+    }
+  }
+  const closer = pick(STANDINGS_CLOSERS, `tabla-${round}-${ldu?.rank ?? ''}-${ldu?.points ?? ''}`);
+  return (
+    lines.join('\n') +
+    `\n\n${closer}\n\n#LDU #LigaDeQuito #LigaPro #SerieA #TablaDePosiciones #FutbolEcuatoriano`
   );
 }
