@@ -31,6 +31,32 @@ const VENUES = {
   otra: { venue: 'Estadio Maracaná', city: 'Río de Janeiro', country: 'Brasil' },
 };
 
+// Fabricated extras so samples preview the scorers strip (results) and the
+// last-five form pills (fixtures). The 'otra' samples get none, to preview
+// the plain layout too.
+const sampleForm = (lduHome) => ({
+  scorers: null,
+  form: {
+    home: lduHome ? ['W', 'W', 'D', 'W', 'W'] : ['L', 'D', 'W', 'L', 'D'],
+    away: lduHome ? ['L', 'D', 'W', 'L', 'D'] : ['W', 'W', 'D', 'W', 'W'],
+  },
+});
+const sampleScorers = (lduHome, outcome) => {
+  const ldu =
+    outcome === 'win'
+      ? [{ name: 'Estrada', minutes: ["23'"], og: false, pen: false },
+         { name: 'Villamil', minutes: ["58'", "90'+2'"], og: false, pen: false }]
+      : [{ name: 'Medina', minutes: ["71'"], og: false, pen: true }];
+  const rival = outcome === 'win' ? [] : outcome === 'draw'
+    ? [{ name: 'Viera', minutes: ["20'"], og: false, pen: false }]
+    : [{ name: 'Cano', minutes: ["12'", "44'"], og: false, pen: false },
+       { name: 'Rojas', minutes: ["79'"], og: true, pen: false }];
+  return {
+    scorers: { home: lduHome ? ldu : rival, away: lduHome ? rival : ldu },
+    form: null,
+  };
+};
+
 export function buildSampleMatches() {
   const out = [];
   let day = 10;
@@ -44,6 +70,7 @@ export function buildSampleMatches() {
       const away = lduHome ? rivalFn() : LDU();
       out.push({
         type: 'fixture',
+        extras: type === 'otra' ? null : sampleForm(lduHome),
         match: {
           id: `sample-${type}-fix`,
           date: `2026-08-${String(day).padStart(2, '0')}T00:30Z`, // 19:30 Ecuador
@@ -65,6 +92,7 @@ export function buildSampleMatches() {
       else { ldu.score = '1'; rival.score = '3'; rival.winner = true; }
       out.push({
         type: 'result',
+        extras: type === 'otra' ? null : sampleScorers(lduHome, outcome),
         match: {
           id: `sample-${type}-res`,
           date: `2026-08-${String(day).padStart(2, '0')}T00:30Z`,

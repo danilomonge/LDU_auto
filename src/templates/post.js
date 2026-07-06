@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const FONTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'assets', 'fonts');
 const fontUri = (file) =>
   `data:font/woff2;base64,${fs.readFileSync(path.join(FONTS_DIR, file)).toString('base64')}`;
-const FONT_CSS = `
+export const FONT_CSS = `
   @font-face {
     font-family: 'Archivo Expanded';
     font-weight: 100 1000;
@@ -75,14 +75,14 @@ export const THEMES = {
   },
 };
 
-const esc = (s) =>
+export const esc = (s) =>
   String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ESPN disambiguates names like "Libertad (Ecuador)" — drop the parenthetical.
-const cleanName = (s) => String(s ?? '').replace(/\s*\([^)]*\)\s*$/, '');
+export const cleanName = (s) => String(s ?? '').replace(/\s*\([^)]*\)\s*$/, '');
 
 // Faint pitch line-art: halfway line, center circle, penalty boxes.
-function pitchSvg(stroke) {
+export function pitchSvg(stroke) {
   return `
   <svg class="pitch" viewBox="0 0 1080 1350" fill="none" xmlns="http://www.w3.org/2000/svg">
     <g stroke="${stroke}" stroke-width="2">
@@ -110,6 +110,42 @@ function teamBlock(team, logoUri, { winner = null } = {}) {
     </div>`;
 }
 
+// One scorer line: "ESTRADA 12' 45'" (+ "(AG)" for own goals). Minutes come
+// from ESPN already suffixed with the apostrophe.
+function scorerLines(scorers) {
+  return (scorers || [])
+    .slice(0, 4)
+    .map(
+      (s) =>
+        `<div class="scorer">${esc(s.name)}${s.og ? ' <span class="og">(AG)</span>' : s.pen ? ' <span class="og">(P)</span>' : ''} <b>${s.minutes
+          .map((m) => esc(m))
+          .join(' ')}</b></div>`
+    )
+    .join('');
+}
+
+// Last-five form as G/E/P pills, oldest → newest.
+const FORM_LETTER = { W: 'G', D: 'E', L: 'P' };
+function formPills(form) {
+  if (!form || form.length === 0) return '';
+  const pills = form
+    .map((r) => `<span class="pill pill-${r.toLowerCase()}">${FORM_LETTER[r]}</span>`)
+    .join('');
+  return `<div class="form">${pills}</div>`;
+}
+
+// Strip under the matchup, one column aligned under each crest. Empty columns
+// still render so a single-sided list keeps its side.
+function extrasRow(left, right) {
+  if (!left && !right) return '';
+  return `
+    <div class="extras-row">
+      <div class="ex">${left}</div>
+      <div class="ex-mid"></div>
+      <div class="ex">${right}</div>
+    </div>`;
+}
+
 /**
  * Build the poster HTML.
  * @param {object} p
@@ -119,8 +155,9 @@ function teamBlock(team, logoUri, { winner = null } = {}) {
  * @param {string} p.awayLogo       data URI
  * @param {string} p.dayLine        e.g. "DOMINGO 12 DE JULIO"
  * @param {string} p.timeLine       e.g. "17:00"
+ * @param {object} [p.extras]       { scorers: {home,away}, form: {home,away} }
  */
-export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, timeLine }) {
+export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, timeLine, extras }) {
   const theme = THEMES[match.competitionType] || THEMES.otra;
   const isResult = postType === 'result';
   const headline = isResult ? 'FINAL DEL<br/>PARTIDO' : 'PRÓXIMO<br/>PARTIDO';
@@ -128,6 +165,11 @@ export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, t
   const homeWon = match.home.winner;
   const awayWon = match.away.winner;
   const draw = isResult && !homeWon && !awayWon;
+
+  // Result posters list goalscorers; fixture posters show last-five form.
+  const extrasHtml = isResult
+    ? extrasRow(scorerLines(extras?.scorers?.home), scorerLines(extras?.scorers?.away))
+    : extrasRow(formPills(extras?.form?.home), formPills(extras?.form?.away));
 
   const center = isResult
     ? `
@@ -205,7 +247,32 @@ export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, t
   }
 
   main { position: relative; z-index: 2; flex: 1; display: flex; align-items: center; }
+  .stack { width: 100%; display: flex; flex-direction: column; gap: 46px; }
   .matchup { width: 100%; display: flex; align-items: center; justify-content: space-between; }
+
+  .extras-row { display: flex; align-items: flex-start; justify-content: space-between; }
+  .extras-row .ex {
+    width: 300px; flex-shrink: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  .extras-row .ex-mid { flex: 1; }
+  .scorer {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 23px; font-weight: 500; letter-spacing: 0.1em;
+    text-transform: uppercase; color: ${theme.inkDim};
+    white-space: nowrap;
+  }
+  .scorer b { font-weight: 600; color: ${theme.accent}; }
+  .scorer .og { font-size: 18px; letter-spacing: 0.08em; }
+  .form { display: flex; gap: 10px; }
+  .pill {
+    width: 40px; height: 40px; border-radius: 13px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Grotesk', sans-serif; font-size: 19px; font-weight: 700;
+  }
+  .pill-w { background: ${theme.accentSoft}; color: ${theme.accent}; border: 1px solid ${theme.accent}55; }
+  .pill-d { border: 1px solid rgba(255,255,255,0.22); color: ${theme.inkDim}; background: transparent; }
+  .pill-l { background: rgba(255,255,255,0.045); color: rgba(255,255,255,0.34); border: 1px solid rgba(255,255,255,0.09); }
   .team { display: flex; flex-direction: column; align-items: center; gap: 34px; width: 300px; flex-shrink: 0; }
   .team-dim { opacity: 0.55; }
   .crest {
@@ -300,10 +367,13 @@ export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, t
     </header>
 
     <main>
-      <div class="matchup">
-        ${teamBlock(match.home, homeLogo, { winner: isResult ? homeWon || (draw ? null : false) : null })}
-        ${center}
-        ${teamBlock(match.away, awayLogo, { winner: isResult ? awayWon || (draw ? null : false) : null })}
+      <div class="stack">
+        <div class="matchup">
+          ${teamBlock(match.home, homeLogo, { winner: isResult ? homeWon || (draw ? null : false) : null })}
+          ${center}
+          ${teamBlock(match.away, awayLogo, { winner: isResult ? awayWon || (draw ? null : false) : null })}
+        </div>
+        ${extrasHtml}
       </div>
     </main>
 

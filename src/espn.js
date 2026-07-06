@@ -120,6 +120,127 @@ export async function fetchAllMatches() {
   return [...byId.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
+// --- Match extras: goalscorers + recent form (event summary endpoint) ------
+
+// Scoring plays among key events. Shootout kicks and missed/saved penalties
+// are not goals in the running score and must not be listed as scorers.
+function isScoringEvent(typeText) {
+  const t = String(typeText || '').toLowerCase();
+  if (/(missed|saved|shootout)/.test(t)) return false;
+  return t.includes('goal') || t.includes('penalty');
+}
+
+// Players are captioned by surname, football-graphic style: everything after
+// the first given name ("Mateo Viera" → "Viera"); single-word names kept.
+function surname(displayName) {
+  const words = String(displayName || '').trim().split(/\s+/);
+  return words.length > 1 ? words.slice(1).join(' ') : words[0] || '';
+}
+
+/**
+ * Extract goalscorers from a summary's keyEvents, grouped per side and
+ * aggregated per player: { home: [{name, minutes, og, pen}], away: [...] }.
+ * `event.team` is the side credited with the goal on the scoreboard.
+ */
+export function extractScorers(keyEvents, homeId, awayId) {
+  const sides = { [homeId]: [], [awayId]: [] };
+  for (const ev of keyEvents || []) {
+    const typeText = ev.type?.text || '';
+    if (!isScoringEvent(typeText)) continue;
+    const teamId = ev.team?.id;
+    if (!sides[teamId]) continue;
+    const athlete = (ev.participants || []).find((p) => p.athlete)?.athlete;
+    const name = surname(athlete?.displayName) || '—';
+    const minute = ev.clock?.displayValue || '';
+    const og = /own goal/i.test(typeText);
+    const pen = /penalty/i.test(typeText);
+    const list = sides[teamId];
+    const prev = list.find((s) => s.name === name && s.og === og);
+    if (prev) prev.minutes.push(minute);
+    else list.push({ name, minutes: [minute], og, pen });
+  }
+  return { home: sides[homeId], away: sides[awayId] };
+}
+
+/**
+ * Extract W/D/L form from a summary's lastFiveGames, oldest → newest:
+ * { home: ['W','D',…], away: […] }. ESPN lists most-recent first.
+ */
+export function extractForm(lastFiveGames, homeId, awayId) {
+  const out = { home: [], away: [] };
+  for (const entry of lastFiveGames || []) {
+    const key = entry.team?.id === homeId ? 'home' : entry.team?.id === awayId ? 'away' : null;
+    if (!key) continue;
+    out[key] = (entry.events || [])
+      .slice(0, 5)
+      .map((e) => String(e.gameResult || '').toUpperCase())
+      .filter((r) => ['W', 'D', 'L'].includes(r))
+      .reverse();
+  }
+  return out;
+}
+
+// Fetch scorers + form for one match. Best-effort: any failure returns null
+// and the poster renders exactly as it would without extras.
+export async function fetchMatchExtras(match) {
+  try {
+    const data = await fetchJson(`${BASE}/${match.league}/summary?event=${match.id}`);
+    return {
+      scorers: extractScorers(data.keyEvents, match.home.id, match.away.id),
+      form: extractForm(data.lastFiveGames, match.home.id, match.away.id),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// --- League standings (LigaPro) --------------------------------------------
+
+const STANDINGS_URL = 'https://site.api.espn.com/apis/v2/sports/soccer/ecu.1/standings';
+
+/**
+ * Fetch the LigaPro table, normalized:
+ * { seasonName, stageName, entries: [{rank, team:{id,name,shortName,abbrev,logo},
+ *   played, wins, draws, losses, goalsFor, goalsAgainst, goalDiff, points}] }
+ * Entries come sorted by rank. Returns null on any failure.
+ */
+export async function fetchStandings() {
+  try {
+    const data = await fetchJson(STANDINGS_URL);
+    const stage = (data.children || []).find((c) => c.standings?.entries?.length);
+    if (!stage) return null;
+    const stat = (e, name) => e.stats?.find((s) => s.name === name);
+    const entries = (stage.standings.entries || [])
+      .map((e) => ({
+        rank: stat(e, 'rank')?.value ?? null,
+        team: {
+          id: e.team?.id,
+          name: e.team?.displayName,
+          shortName: e.team?.shortDisplayName || e.team?.displayName,
+          abbrev: e.team?.abbreviation || '',
+          logo: pickLogo(e.team, false),
+        },
+        played: stat(e, 'gamesPlayed')?.value ?? 0,
+        wins: stat(e, 'wins')?.value ?? 0,
+        draws: stat(e, 'ties')?.value ?? 0,
+        losses: stat(e, 'losses')?.value ?? 0,
+        goalsFor: stat(e, 'pointsFor')?.value ?? 0,
+        goalsAgainst: stat(e, 'pointsAgainst')?.value ?? 0,
+        goalDiff: stat(e, 'pointDifferential')?.displayValue || '0',
+        points: stat(e, 'points')?.value ?? 0,
+      }))
+      .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+    if (!entries.length || entries.some((e) => e.rank == null)) return null;
+    return {
+      seasonName: stage.standings.seasonDisplayName || 'LigaPro',
+      stageName: stage.name || '',
+      entries,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Download a logo and return it as a base64 data URI (inlined into the HTML
 // template so rendering never depends on hotlinking).
 export async function fetchLogoDataUri(url) {

@@ -1,20 +1,27 @@
 # LDU Auto — generador automático de posts de Instagram
 
 Genera y publica automáticamente posts de Instagram para **Liga Deportiva
-Universitaria de Quito**: anuncio del próximo partido y resultado final de cada
-partido, con un diseño minimalista/futurista propio para cada competición
-(LigaPro, Libertadores, Sudamericana, Copa Ecuador, Supercopa Ecuador,
-amistosos y otras competiciones).
+Universitaria de Quito**: anuncio del próximo partido (con racha de los últimos
+cinco partidos de ambos equipos), resultado final de cada partido (con
+goleadores y minutos) y tabla de posiciones de la LigaPro tras cada fecha, con
+un diseño minimalista/futurista propio para cada competición (LigaPro,
+Libertadores, Sudamericana, Copa Ecuador, Supercopa Ecuador, amistosos y otras
+competiciones).
 
 ## Cómo funciona
 
 1. **Datos** — API pública de ESPN (gratuita, sin clave): fechas, estadios,
    ciudades, logos oficiales de ambos equipos, marcadores y estado del partido,
    en todas las competiciones configuradas ([src/config.js](src/config.js)).
+   Del resumen de cada partido salen además los goleadores con su minuto y la
+   forma reciente (últimos 5) de ambos equipos; del endpoint de standings, la
+   tabla completa de la LigaPro.
 2. **Detección de cambios** — [data/state.json](data/state.json) guarda qué se
    anunció y qué resultados ya se publicaron. En cada ejecución solo se generan
    posts si hay estado nuevo: un nuevo "próximo partido", un cambio de
-   fecha/hora, o un partido recién finalizado.
+   fecha/hora, o un partido recién finalizado. La tabla de posiciones se
+   publica solo inmediatamente después de un resultado de LigaPro y solo si la
+   tabla cambió desde la última vez (fingerprint en el estado).
 3. **Render** — cada post es una plantilla HTML
    ([src/templates/post.js](src/templates/post.js)) renderizada a PNG
    1080×1350 con Playwright/Chromium. Tema visual por competición.
@@ -65,13 +72,14 @@ y los deja en cola para publicarse cuando se configuren las credenciales.
 
 ```
 src/
-  config.js          equipo, ligas ESPN, tipos de competición y hashtags
-  espn.js            cliente ESPN + normalización de partidos
-  state.js           estado persistente y planificación de posts
-  templates/post.js  plantilla HTML 1080×1350 con temas por competición
-  render.js          HTML → PNG con Playwright
-  captions.js        captions en español por tipo de post y resultado
-  publish.js         publicación vía Instagram Graph API
-  samples.js         partidos de demo para previsualizar diseños
-  index.js           orquestador (generate | publish | samples)
+  config.js               equipo, ligas ESPN, tipos de competición y hashtags
+  espn.js                 cliente ESPN: partidos, goleadores, forma y standings
+  state.js                estado persistente y planificación de posts
+  templates/post.js       plantilla HTML 1080×1350 con temas por competición
+  templates/standings.js  plantilla de la tabla de posiciones de LigaPro
+  render.js               HTML → PNG con Playwright
+  captions.js             captions en español por tipo de post y resultado
+  publish.js              publicación vía Instagram Graph API
+  samples.js              partidos de demo para previsualizar diseños
+  index.js                orquestador (generate | publish | cleanup | samples)
 ```

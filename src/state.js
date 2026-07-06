@@ -95,3 +95,24 @@ export function planPosts(matches, state, now = new Date()) {
   // the state file byte-identical and the workflow commits nothing.
   return { posts, state };
 }
+
+export function standingsFingerprint(standings) {
+  return standings.entries
+    .map((e) => `${e.rank}:${e.team.id}:${e.points}:${e.played}`)
+    .join('|');
+}
+
+/**
+ * Decide whether to post the league table. Posted only right after an LDU
+ * LigaPro result went out (the natural "tabla tras la fecha" moment) and only
+ * if the table actually changed since the last standings post — re-runs and
+ * rescheduled result posts never duplicate it.
+ * Mutates state; returns true when a standings post should be generated.
+ */
+export function planStandingsPost(standings, state, resultJustPosted) {
+  if (!standings || !resultJustPosted) return false;
+  const fp = standingsFingerprint(standings);
+  if (state.standings?.fingerprint === fp) return false;
+  state.standings = { fingerprint: fp };
+  return true;
+}

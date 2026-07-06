@@ -12,19 +12,20 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { fetchAllMatches, fetchLogoDataUri } from './espn.js';
+import { fetchAllMatches, fetchLogoDataUri, fetchMatchExtras, fetchStandings } from './espn.js';
 import { renderPostHtml } from './templates/post.js';
+import { renderStandingsHtml, selectRows } from './templates/standings.js';
 // Playwright is only needed for rendering; import lazily so publish/diag
 // modes work without dev dependencies installed.
 const renderer = () => import('./render.js');
-import { buildCaption, formatDayLine, formatTimeLine } from './captions.js';
-import { loadState, saveState, planPosts, loadPending, savePending } from './state.js';
+import { buildCaption, buildStandingsCaption, formatDayLine, formatTimeLine } from './captions.js';
+import { loadState, saveState, planPosts, planStandingsPost, loadPending, savePending } from './state.js';
 import { publishPending, diagnose } from './publish.js';
-import { PATHS } from './config.js';
+import { PATHS, TEAM_ID } from './config.js';
 import { buildSampleMatches } from './samples.js';
 import { pruneOldPosts } from './cleanup.js';
 
-async function renderPost(match, type, outDir) {
+async function renderPost(match, type, outDir, extras = null) {
   const dark = true;
   const [homeLogo, awayLogo] = await Promise.all([
     fetchLogoDataUri(dark && match.home.logoDark ? match.home.logoDark : match.home.logo),
@@ -37,15 +38,41 @@ async function renderPost(match, type, outDir) {
     awayLogo,
     dayLine: formatDayLine(match.date, match.timeValid),
     timeLine: formatTimeLine(match.date, match.timeValid),
+    extras,
   });
   const file = `${match.date.slice(0, 10)}_${match.id}_${type}.png`;
   const outPath = path.join(outDir, file);
   fs.mkdirSync(outDir, { recursive: true });
   const { renderHtmlToPng } = await renderer();
   await renderHtmlToPng(html, outPath);
-  const caption = buildCaption(type, match);
+  const caption = buildCaption(type, match, extras);
   fs.writeFileSync(outPath.replace(/\.png$/, '.txt'), caption);
   return { file, caption };
+}
+
+// Render the LigaPro table poster. Only the displayed rows' crests are
+// downloaded; the filename keeps the YYYY-MM-DD_<id>_<type> convention that
+// cleanup relies on.
+async function renderStandingsPost(standings, outDir, now = new Date()) {
+  const rows = selectRows(standings.entries).filter((r) => !r.gap);
+  const logoPairs = await Promise.all(
+    rows.map(async (r) => [r.team.id, await fetchLogoDataUri(r.team.logo)])
+  );
+  const html = renderStandingsHtml({
+    standings,
+    logos: Object.fromEntries(logoPairs),
+    dayLine: formatDayLine(now.toISOString(), true),
+  });
+  const ldu = standings.entries.find((e) => e.team.id === TEAM_ID);
+  const round = ldu?.played ?? Math.max(...standings.entries.map((e) => e.played));
+  const file = `${now.toISOString().slice(0, 10)}_tabla-f${round}_standings.png`;
+  const outPath = path.join(outDir, file);
+  fs.mkdirSync(outDir, { recursive: true });
+  const { renderHtmlToPng } = await renderer();
+  await renderHtmlToPng(html, outPath);
+  const caption = buildStandingsCaption(standings);
+  fs.writeFileSync(outPath.replace(/\.png$/, '.txt'), caption);
+  return { eventId: `tabla-f${round}`, file, caption };
 }
 
 async function generate() {
@@ -64,19 +91,42 @@ async function generate() {
   }
 
   const pending = loadPending();
-  for (const { match, type } of posts) {
-    console.log(`Rendering ${type} post: ${match.home.shortName} vs ${match.away.shortName} [${match.competitionType}]`);
-    const { file, caption } = await renderPost(match, type, PATHS.outDir);
+  const queue = (eventId, type, file, caption) => {
     // Replace any stale pending entry for the same event+type (rescheduled).
-    const filtered = pending.filter((p) => !(p.eventId === match.id && p.type === type));
-    filtered.push({ eventId: match.id, type, file, caption, createdAt: new Date().toISOString() });
+    const filtered = pending.filter((p) => !(p.eventId === eventId && p.type === type));
+    filtered.push({ eventId, type, file, caption, createdAt: new Date().toISOString() });
     pending.length = 0;
     pending.push(...filtered);
+  };
+
+  let generated = 0;
+  for (const { match, type } of posts) {
+    console.log(`Rendering ${type} post: ${match.home.shortName} vs ${match.away.shortName} [${match.competitionType}]`);
+    // Scorers (results) and last-five form (fixtures); null when unavailable.
+    const extras = await fetchMatchExtras(match);
+    const { file, caption } = await renderPost(match, type, PATHS.outDir, extras);
+    queue(match.id, type, file, caption);
+    generated += 1;
   }
+
+  // A LigaPro result just went out → follow it with the updated table, once.
+  const ligaproResultPosted = posts.some(
+    (p) => p.type === 'result' && p.match.competitionType === 'ligapro'
+  );
+  if (ligaproResultPosted) {
+    const standings = await fetchStandings();
+    if (planStandingsPost(standings, state, true)) {
+      console.log('Rendering standings post: LigaPro table');
+      const { eventId, file, caption } = await renderStandingsPost(standings, PATHS.outDir);
+      queue(eventId, 'standings', file, caption);
+      generated += 1;
+    }
+  }
+
   savePending(pending);
   saveState(state);
   await (await renderer()).closeBrowser();
-  console.log(`Generated ${posts.length} post(s). Queued in ${PATHS.pending}.`);
+  console.log(`Generated ${generated} post(s). Queued in ${PATHS.pending}.`);
 }
 
 async function cleanup() {
@@ -88,9 +138,15 @@ async function cleanup() {
 async function samples() {
   const sampleMatches = buildSampleMatches();
   const outDir = 'output/samples';
-  for (const { match, type } of sampleMatches) {
+  for (const { match, type, extras } of sampleMatches) {
     console.log(`Rendering sample [${match.competitionType}] ${type}`);
-    await renderPost(match, type, outDir);
+    await renderPost(match, type, outDir, extras);
+  }
+  // Standings sample uses the live LigaPro table (needs network anyway).
+  const standings = await fetchStandings();
+  if (standings) {
+    console.log('Rendering sample standings post');
+    await renderStandingsPost(standings, outDir);
   }
   await (await renderer()).closeBrowser();
   console.log(`Samples written to ${outDir}/`);
