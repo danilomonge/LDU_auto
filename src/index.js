@@ -16,7 +16,7 @@ import { renderPostHtml } from './templates/post.js';
 import { renderHtmlToPng, closeBrowser } from './render.js';
 import { buildCaption, formatDayLine, formatTimeLine } from './captions.js';
 import { loadState, saveState, planPosts, loadPending, savePending } from './state.js';
-import { publishPending } from './publish.js';
+import { publishPending, diagnose } from './publish.js';
 import { PATHS } from './config.js';
 import { buildSampleMatches } from './samples.js';
 
@@ -90,6 +90,7 @@ try {
   if (mode === 'generate') await generate();
   else if (mode === 'publish') await publishPending();
   else if (mode === 'samples') await samples();
+  else if (mode === 'diag') await diagnose();
   else {
     console.error(`Unknown mode: ${mode}`);
     process.exit(1);

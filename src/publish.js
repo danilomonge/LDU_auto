@@ -122,3 +122,54 @@ export async function publishPending() {
     process.exitCode = 1;
   }
 }
+
+// Diagnostic mode: validates the configured credentials against the Graph
+// API and prints what the token can actually see, so misconfigured secrets
+// (wrong id, missing permissions) are identified from the Actions log.
+export async function diagnose() {
+  const userId = process.env.IG_USER_ID;
+  const token = process.env.IG_ACCESS_TOKEN;
+  if (!token) {
+    console.log('IG_ACCESS_TOKEN is not set.');
+    return;
+  }
+  const GRAPH = graphBase(token);
+  console.log(`Token type: ${token.startsWith('IGA') ? 'Instagram login (IGA…)' : 'Facebook login (EAA…)'} → ${GRAPH}`);
+
+  try {
+    const me = await graphGet(`${GRAPH}/me`, { fields: 'id,name', access_token: token });
+    console.log(`Token belongs to: ${me.name ?? '(no name)'}`);
+  } catch (err) {
+    console.log(`Token is INVALID or expired: ${err.message}`);
+    return;
+  }
+
+  if (userId) {
+    try {
+      const u = await graphGet(`${GRAPH}/${userId}`, { fields: 'username', access_token: token });
+      console.log(`IG_USER_ID OK → @${u.username}`);
+    } catch (err) {
+      console.log(`IG_USER_ID is NOT a reachable Instagram professional account: ${err.message}`);
+    }
+  } else {
+    console.log('IG_USER_ID is not set.');
+  }
+
+  if (!token.startsWith('IGA')) {
+    try {
+      const pages = await graphGet(`${GRAPH}/me/accounts`, {
+        fields: 'name,id,instagram_business_account{id,username}',
+        access_token: token,
+      });
+      console.log('Facebook pages visible to this token:');
+      for (const p of pages.data || []) {
+        const ig = p.instagram_business_account;
+        console.log(`  - Page "${p.name}" (page id ${p.id}) → ` +
+          (ig ? `Instagram @${ig.username}, IG_USER_ID should be: ${ig.id}` : 'NO Instagram account linked'));
+      }
+      if (!(pages.data || []).length) console.log('  (none — token lacks pages_show_list or user manages no pages)');
+    } catch (err) {
+      console.log(`Could not list pages: ${err.message}`);
+    }
+  }
+}
