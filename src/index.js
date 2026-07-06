@@ -13,7 +13,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fetchAllMatches, fetchLogoDataUri } from './espn.js';
 import { renderPostHtml } from './templates/post.js';
-import { renderHtmlToPng, closeBrowser } from './render.js';
+// Playwright is only needed for rendering; import lazily so publish/diag
+// modes work without dev dependencies installed.
+const renderer = () => import('./render.js');
 import { buildCaption, formatDayLine, formatTimeLine } from './captions.js';
 import { loadState, saveState, planPosts, loadPending, savePending } from './state.js';
 import { publishPending, diagnose } from './publish.js';
@@ -37,6 +39,7 @@ async function renderPost(match, type, outDir) {
   const file = `${match.date.slice(0, 10)}_${match.id}_${type}.png`;
   const outPath = path.join(outDir, file);
   fs.mkdirSync(outDir, { recursive: true });
+  const { renderHtmlToPng } = await renderer();
   await renderHtmlToPng(html, outPath);
   const caption = buildCaption(type, match);
   fs.writeFileSync(outPath.replace(/\.png$/, '.txt'), caption);
@@ -70,7 +73,7 @@ async function generate() {
   }
   savePending(pending);
   saveState(state);
-  await closeBrowser();
+  await (await renderer()).closeBrowser();
   console.log(`Generated ${posts.length} post(s). Queued in ${PATHS.pending}.`);
 }
 
@@ -81,7 +84,7 @@ async function samples() {
     console.log(`Rendering sample [${match.competitionType}] ${type}`);
     await renderPost(match, type, outDir);
   }
-  await closeBrowser();
+  await (await renderer()).closeBrowser();
   console.log(`Samples written to ${outDir}/`);
 }
 
