@@ -80,22 +80,35 @@ async function waitForContainer(graph, containerId, token, timeoutMs = 120000) {
 const cleanEnv = (name) =>
   process.env[name]?.replace(/["'\s]/g, '') || undefined;
 
+// Two destinations:
+//  - "instagram": IG professional account (container → publish flow)
+//  - "facebook":  Facebook PAGE feed (simple /photos post). Its token falls
+//    back to IG_ACCESS_TOKEN, which works when that is a Page token.
 export function configuredAccounts() {
   const accounts = [];
   const igId = cleanEnv('IG_USER_ID');
   const igToken = cleanEnv('IG_ACCESS_TOKEN');
   if (igId && igToken) {
-    accounts.push({ key: 'instagram', userId: igId, token: igToken });
+    accounts.push({ key: 'instagram', type: 'ig', userId: igId, token: igToken });
   }
   const fbId = cleanEnv('FACEBOOK_USER_ID');
   const fbToken = cleanEnv('FACEBOOK_ACCESS_TOKEN') || igToken;
   if (fbId && fbToken) {
-    accounts.push({ key: 'facebook', userId: fbId, token: fbToken });
+    accounts.push({ key: 'facebook', type: 'page', userId: fbId, token: fbToken });
   }
   return accounts;
 }
 
 async function publishTo(account, imageUrl, caption) {
+  if (account.type === 'page') {
+    // Facebook Page feed: single-call photo post. Needs a Page token with
+    // pages_manage_posts.
+    return graphPost(`https://graph.facebook.com/v23.0/${account.userId}/photos`, {
+      url: imageUrl,
+      message: caption,
+      access_token: account.token,
+    });
+  }
   const GRAPH = graphBase(account.token);
   const container = await graphPost(`${GRAPH}/${account.userId}/media`, {
     image_url: imageUrl,
@@ -169,12 +182,12 @@ export async function diagnose() {
     return;
   }
   for (const account of accounts) {
-    console.log(`\n===== Account [${account.key}] =====`);
-    await diagnoseAccount(account.userId, account.token);
+    console.log(`\n===== Account [${account.key}] (${account.type === 'page' ? 'Facebook Page feed' : 'Instagram'}) =====`);
+    await diagnoseAccount(account.userId, account.token, account.type);
   }
 }
 
-async function diagnoseAccount(userId, token) {
+async function diagnoseAccount(userId, token, type = 'ig') {
   const GRAPH = graphBase(token);
   console.log(`Token type: ${token.startsWith('IGA') ? 'Instagram login (IGA…)' : 'Facebook login (EAA…)'} → ${GRAPH}`);
   console.log(`Token shape: starts "${token.slice(0, 3)}…", length ${token.length} chars` +
@@ -205,15 +218,24 @@ async function diagnoseAccount(userId, token) {
     console.log(`GET /me failed (typical for Page tokens without pages_read_engagement): ${err.message}`);
   }
 
-  if (userId) {
+  if (userId && type === 'page') {
+    try {
+      const p = await graphGet(`https://graph.facebook.com/v23.0/${userId}`, {
+        fields: 'name,username', access_token: token,
+      });
+      console.log(`Page id OK → "${p.name}"${p.username ? ` (@${p.username})` : ''}`);
+    } catch (err) {
+      console.log(`Page id is NOT reachable: ${err.message}`);
+    }
+  } else if (userId) {
     try {
       const u = await graphGet(`${GRAPH}/${userId}`, { fields: 'username', access_token: token });
-      console.log(`IG_USER_ID OK → @${u.username}`);
+      console.log(`IG user id OK → @${u.username}`);
     } catch (err) {
-      console.log(`IG_USER_ID is NOT a reachable Instagram professional account: ${err.message}`);
+      console.log(`IG user id is NOT a reachable Instagram professional account: ${err.message}`);
     }
   } else {
-    console.log('IG_USER_ID is not set.');
+    console.log('User id is not set.');
   }
 
   if (!token.startsWith('IGA')) {
