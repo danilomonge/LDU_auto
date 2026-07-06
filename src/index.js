@@ -2,6 +2,7 @@
 //
 //   node src/index.js generate   fetch ESPN → detect changes → render posts
 //   node src/index.js publish    publish pending posts to Instagram
+//   node src/index.js cleanup    delete rendered posts older than 30 days
 //   node src/index.js samples    render demo posts for every competition type
 //
 // `generate` writes PNGs + captions to output/posts/ and queues them in
@@ -21,6 +22,7 @@ import { loadState, saveState, planPosts, loadPending, savePending } from './sta
 import { publishPending, diagnose } from './publish.js';
 import { PATHS } from './config.js';
 import { buildSampleMatches } from './samples.js';
+import { pruneOldPosts } from './cleanup.js';
 
 async function renderPost(match, type, outDir) {
   const dark = true;
@@ -77,6 +79,12 @@ async function generate() {
   console.log(`Generated ${posts.length} post(s). Queued in ${PATHS.pending}.`);
 }
 
+async function cleanup() {
+  const removed = pruneOldPosts(PATHS.outDir, 30, new Date(), loadPending());
+  if (removed.length === 0) console.log('Nothing to prune — no rendered posts older than 30 days.');
+  else console.log(`Pruned ${removed.length} old file(s): ${removed.join(', ')}`);
+}
+
 async function samples() {
   const sampleMatches = buildSampleMatches();
   const outDir = 'output/samples';
@@ -92,6 +100,7 @@ const mode = process.argv[2] || 'generate';
 try {
   if (mode === 'generate') await generate();
   else if (mode === 'publish') await publishPending();
+  else if (mode === 'cleanup') await cleanup();
   else if (mode === 'samples') await samples();
   else if (mode === 'diag') await diagnose();
   else {

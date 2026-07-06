@@ -1,0 +1,56 @@
+name: Renew Meta access token
+
+# Exchanges the long-lived user token for a fresh 60-day one and derives a new
+# Page token, then writes both back to the repo secrets. Running monthly means
+# the tokens never reach their 60-day expiry.
+#
+# Required secrets:
+#   FB_APP_ID / FB_APP_SECRET  from the Meta app (Settings → Basic)
+#   FB_USER_TOKEN              a long-lived USER token (60 days)
+#   FACEBOOK_USER_ID           the Facebook page id (already set)
+#   GH_PAT                     GitHub token with repo secrets write access
+#                              (fine-grained PAT: this repo → Secrets: R/W)
+
+on:
+  schedule:
+    - cron: '0 12 1 * *' # monthly, day 1 at 12:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  renew:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exchange tokens and update secrets
+        env:
+          FB_APP_ID: ${{ secrets.FB_APP_ID }}
+          FB_APP_SECRET: ${{ secrets.FB_APP_SECRET }}
+          FB_USER_TOKEN: ${{ secrets.FB_USER_TOKEN }}
+          FACEBOOK_USER_ID: ${{ secrets.FACEBOOK_USER_ID }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "$FB_APP_ID" ] || [ -z "$FB_APP_SECRET" ] || [ -z "$FB_USER_TOKEN" ] || [ -z "$GH_TOKEN" ]; then
+            echo "Missing secrets (need FB_APP_ID, FB_APP_SECRET, FB_USER_TOKEN, GH_PAT). Skipping."
+            exit 0
+          fi
+
+          # 1) Fresh 60-day user token (exchanging resets the clock).
+          NEW_USER=$(curl -sf "https://graph.facebook.com/v23.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${FB_APP_ID}&client_secret=${FB_APP_SECRET}&fb_exchange_token=${FB_USER_TOKEN}" | jq -r '.access_token // empty')
+          if [ -z "$NEW_USER" ]; then
+            echo "::error::Token exchange failed — FB_USER_TOKEN may be expired. Regenerate it manually (docs/INSTAGRAM_SETUP.md)."
+            exit 1
+          fi
+          echo "::add-mask::$NEW_USER"
+
+          # 2) Fresh page token for the configured page.
+          NEW_PAGE=$(curl -sf "https://graph.facebook.com/v23.0/me/accounts?fields=id,access_token&access_token=${NEW_USER}" | jq -r --arg id "$FACEBOOK_USER_ID" '.data[] | select(.id==$id) | .access_token // empty')
+          if [ -z "$NEW_PAGE" ]; then
+            echo "::error::Could not derive a page token for FACEBOOK_USER_ID."
+            exit 1
+          fi
+          echo "::add-mask::$NEW_PAGE"
+
+          # 3) Persist both for the next cycle.
+          gh secret set FB_USER_TOKEN --body "$NEW_USER" -R "$GITHUB_REPOSITORY"
+          gh secret set IG_ACCESS_TOKEN --body "$NEW_PAGE" -R "$GITHUB_REPOSITORY"
+          echo "Tokens renewed: fresh 60-day user token + page token stored."

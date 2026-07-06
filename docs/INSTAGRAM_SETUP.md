@@ -63,7 +63,36 @@ Listo. En el siguiente run (máx. 30 min, o lánzalo manualmente en *Actions →
 LDU Instagram posts → Run workflow*) se publicarán los posts en cola y todos
 los futuros.
 
-## Renovar el token (cada ~60 días)
+## Renovación automática (token "eterno")
+
+El workflow **"Renew Meta access token"** corre el día 1 de cada mes y renueva
+solo los tokens (cada intercambio da 60 días frescos, así que nunca caducan).
+Para activarlo añade estos secrets una única vez:
+
+| Secret | Valor |
+| --- | --- |
+| `FB_APP_ID` | App ID (app → *Settings → Basic*) |
+| `FB_APP_SECRET` | App Secret (mismo lugar, botón *Show*) |
+| `FB_USER_TOKEN` | un token de usuario de larga duración (el del paso 2 del flujo clásico) |
+| `GH_PAT` | token de GitHub con permiso de escritura de secrets en este repo* |
+
+\* En <https://github.com/settings/personal-access-tokens> → *Generate new
+token (fine-grained)* → Repository access: solo `LDU_auto` → Permissions →
+**Secrets: Read and write**. Caduca máximo al año; GitHub te avisa por email
+para regenerarlo.
+
+El workflow actualiza `FB_USER_TOKEN` e `IG_ACCESS_TOKEN` automáticamente.
+Si el token muriera antes de la primera renovación (p. ej. por cambio de
+contraseña de Facebook, que invalida todos los tokens), regenera
+`FB_USER_TOKEN` a mano y el ciclo se retoma.
+
+Alternativa 100 % oficial sin renovaciones: un **System User** en
+[business.facebook.com](https://business.facebook.com) (*Configuración del
+negocio → Usuarios del sistema*) puede generar un token marcado "Never
+expire"; asigna la app y la página al usuario del sistema y usa ese token
+como `IG_ACCESS_TOKEN`.
+
+## Renovar el token a mano (cada ~60 días)
 
 Los tokens `IGAA…` caducan a los 60 días. Renovación con un curl (devuelve un
 token nuevo de 60 días; actualiza el secret):

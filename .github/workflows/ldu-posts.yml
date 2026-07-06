@@ -2,9 +2,9 @@ name: LDU Instagram posts
 
 on:
   schedule:
-    # Every 30 minutes — the pipeline is a no-op unless ESPN state changed
+    # Every hour — the pipeline is a no-op unless ESPN state changed
     # (new next match, rescheduled kickoff, or a freshly finished game).
-    - cron: '*/30 * * * *'
+    - cron: '0 * * * *'
   workflow_dispatch: {}
 
 concurrency:
@@ -37,6 +37,9 @@ jobs:
 
       - name: Generate posts on state changes
         run: node src/index.js generate
+
+      - name: Prune rendered posts older than 30 days
+        run: node src/index.js cleanup
 
       - name: Commit generated posts and state
         id: commit
