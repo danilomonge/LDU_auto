@@ -1,18 +1,21 @@
 name: Renew Meta access token
 
-# Self-renewing token, no GitHub PAT required. The current Page token lives
-# AES-256-encrypted in data/token.enc (key = TOKEN_KEY secret). Twice a month
-# this workflow decrypts it, exchanges it for a fresh 60-day token via the
-# Meta app credentials, verifies the new token actually works, re-encrypts
-# and commits it. Publishing workflows decrypt data/token.enc at runtime, so
-# no secret ever needs manual updating again.
+# Self-renewing tokens, no GitHub PAT required.
+#
+# Meta only resets the 60-day clock when exchanging USER tokens, so the cycle
+# keeps BOTH tokens AES-256-encrypted in the repo:
+#   data/usertoken.enc  long-lived user token (refreshed every run → +60 days)
+#   data/token.enc      page token derived from it (what publishing uses)
+# Twice a month: decrypt user token → fb_exchange (fresh 60 days) → derive
+# page token → verify both → re-encrypt + commit. A run that cannot extend
+# the expiry FAILS so GitHub emails the owner instead of dying silently.
 #
 # Secrets used:
 #   TOKEN_KEY        encryption key (random, never changes)
 #   FB_APP_ID / FB_APP_SECRET  Meta app credentials (never expire)
-#   IG_ACCESS_TOKEN  only as seed/fallback for the first run
-#   FB_USER_TOKEN    optional fallback path (user-token exchange)
-#   FACEBOOK_USER_ID page id, used to verify the renewed token
+#   FB_USER_TOKEN    seed for the first run (any still-valid user token)
+#   IG_ACCESS_TOKEN  legacy seed/fallback for the page token
+#   FACEBOOK_USER_ID page id, used to pick and verify the page token
 
 on:
   schedule:
@@ -34,7 +37,7 @@ jobs:
         with:
           ref: main
 
-      - name: Renew, verify and store token
+      - name: Renew, verify and store tokens
         env:
           TOKEN_KEY: ${{ secrets.TOKEN_KEY }}
           FB_APP_ID: ${{ secrets.FB_APP_ID }}
@@ -45,72 +48,68 @@ jobs:
         run: |
           set -euo pipefail
           GRAPH="https://graph.facebook.com/v23.0"
-          decrypt() { openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass env:TOKEN_KEY -base64 -A -in data/token.enc; }
-          encrypt() { printf %s "$1" | openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass env:TOKEN_KEY -base64 -A -out data/token.enc; }
-          commit_enc() {
+          dec() { openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass env:TOKEN_KEY -base64 -A -in "$1"; }
+          enc() { printf %s "$2" | openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass env:TOKEN_KEY -base64 -A -out "$1"; }
+          expiry() { curl -s "$GRAPH/debug_token?input_token=$1&access_token=$1" | jq -r '.data.expires_at // -1'; }
+          commit_all() {
             git config user.name "ldu-post-bot"
             git config user.email "actions@users.noreply.github.com"
-            git add data/token.enc
+            git add data/token.enc data/usertoken.enc 2>/dev/null || true
             git diff --cached --quiet || { git commit -m "token: renewed $(date -u +%F)"; git pull --rebase origin main; git push origin main; }
           }
 
-          if [ -z "${TOKEN_KEY:-}" ]; then
-            echo "::error::TOKEN_KEY secret is not set."
-            exit 1
-          fi
-
-          # Current token: encrypted store, else the seed secret.
-          if [ -f data/token.enc ]; then
-            CURRENT=$(decrypt)
-          else
-            CURRENT="${IG_ACCESS_TOKEN:-}"
-          fi
-          if [ -z "$CURRENT" ]; then
-            echo "::error::No current token available (no data/token.enc and IG_ACCESS_TOKEN unset)."
-            exit 1
-          fi
-          echo "::add-mask::$CURRENT"
-
+          [ -n "${TOKEN_KEY:-}" ] || { echo "::error::TOKEN_KEY secret is not set."; exit 1; }
           if [ -z "${FB_APP_ID:-}" ] || [ -z "${FB_APP_SECRET:-}" ]; then
-            if [ ! -f data/token.enc ]; then
-              encrypt "$CURRENT"
-              commit_enc
-              echo "Seeded data/token.enc from IG_ACCESS_TOKEN."
+            echo "::error::FB_APP_ID / FB_APP_SECRET not set — cannot renew."
+            exit 1
+          fi
+
+          # --- User token: stored copy, else the FB_USER_TOKEN seed secret.
+          UT=""
+          if [ -f data/usertoken.enc ]; then UT=$(dec data/usertoken.enc); elif [ -n "${FB_USER_TOKEN:-}" ]; then UT="$FB_USER_TOKEN"; fi
+          [ -n "$UT" ] && echo "::add-mask::$UT"
+
+          if [ -n "$UT" ]; then
+            # Primary path: refresh the user token (this RESETS the 60 days)…
+            NU=$(curl -s "$GRAPH/oauth/access_token?grant_type=fb_exchange_token&client_id=${FB_APP_ID}&client_secret=${FB_APP_SECRET}&fb_exchange_token=${UT}" | jq -r '.access_token // empty')
+            if [ -z "$NU" ]; then
+              echo "::error::User-token refresh failed (expired or revoked). Generate a fresh token in the Graph API Explorer, update the FB_USER_TOKEN secret, delete data/usertoken.enc and re-run."
+              exit 1
             fi
-            echo "::warning::FB_APP_ID / FB_APP_SECRET not set — cannot renew. Token will expire unless these secrets are added."
+            echo "::add-mask::$NU"
+            # …and derive a fresh page token from it.
+            NEW=$(curl -s "$GRAPH/me/accounts?fields=id,access_token&access_token=${NU}" | jq -r --arg id "${FACEBOOK_USER_ID:-}" '.data[] | select(.id==$id) | .access_token // empty')
+            if [ -z "$NEW" ]; then
+              echo "::error::Could not derive a page token for FACEBOOK_USER_ID from the refreshed user token."
+              exit 1
+            fi
+            echo "::add-mask::$NEW"
+
+            # Verify the page token works before storing anything.
+            OK=$(curl -s "$GRAPH/${FACEBOOK_USER_ID}?fields=id&access_token=${NEW}" | jq -r 'has("id")')
+            [ "$OK" = "true" ] || { echo "::error::Renewed page token failed verification — keeping previous tokens."; exit 1; }
+
+            NEW_EXP=$(expiry "$NEW"); NU_EXP=$(expiry "$NU")
+            echo "Renewed. User token expires: $([ "$NU_EXP" = "0" ] && echo never || date -u -d "@$NU_EXP" +%F 2>/dev/null || echo "$NU_EXP"); page token expires: $([ "$NEW_EXP" = "0" ] && echo never || date -u -d "@$NEW_EXP" +%F 2>/dev/null || echo "$NEW_EXP")"
+            enc data/usertoken.enc "$NU"
+            enc data/token.enc "$NEW"
+            commit_all
+            echo "Tokens renewed, verified and stored."
             exit 0
           fi
 
-          # Primary path: exchange the current (page) token directly.
-          NEW=$(curl -s "$GRAPH/oauth/access_token?grant_type=fb_exchange_token&client_id=${FB_APP_ID}&client_secret=${FB_APP_SECRET}&fb_exchange_token=${CURRENT}" | jq -r '.access_token // empty')
-
-          # Fallback path: fresh user-token exchange → page token.
-          if [ -z "$NEW" ] && [ -n "${FB_USER_TOKEN:-}" ]; then
-            echo "Direct exchange failed; trying the user-token path."
-            NU=$(curl -s "$GRAPH/oauth/access_token?grant_type=fb_exchange_token&client_id=${FB_APP_ID}&client_secret=${FB_APP_SECRET}&fb_exchange_token=${FB_USER_TOKEN}" | jq -r '.access_token // empty')
-            if [ -n "$NU" ]; then
-              echo "::add-mask::$NU"
-              NEW=$(curl -s "$GRAPH/me/accounts?fields=id,access_token&access_token=${NU}" | jq -r --arg id "${FACEBOOK_USER_ID:-}" '.data[] | select(.id==$id) | .access_token // empty')
+          # --- No user token anywhere: page-token exchange does NOT extend
+          # the expiry (Meta pins it to the original session), so renewal is
+          # impossible. Fail loudly with instructions.
+          PT=""
+          if [ -f data/token.enc ]; then PT=$(dec data/token.enc); else PT="${IG_ACCESS_TOKEN:-}"; fi
+          if [ -n "$PT" ]; then
+            P_EXP=$(expiry "$PT")
+            echo "Current page token expires: $([ "$P_EXP" = "0" ] && echo never || date -u -d "@$P_EXP" +%F 2>/dev/null || echo "$P_EXP")"
+            if [ "$P_EXP" = "0" ]; then
+              echo "Page token never expires — nothing to renew."
+              exit 0
             fi
           fi
-
-          if [ -z "$NEW" ]; then
-            echo "::error::Token renewal failed on every path. Manual action needed (docs/INSTAGRAM_SETUP.md)."
-            exit 1
-          fi
-          echo "::add-mask::$NEW"
-
-          # Verify before storing: token must be valid AND able to read the page.
-          VALID=$(curl -s "$GRAPH/debug_token?input_token=${NEW}&access_token=${NEW}" | jq -r '.data.is_valid // false')
-          PAGE_OK=true
-          if [ -n "${FACEBOOK_USER_ID:-}" ]; then
-            PAGE_OK=$(curl -s "$GRAPH/${FACEBOOK_USER_ID}?fields=id&access_token=${NEW}" | jq -r 'has("id")')
-          fi
-          if [ "$VALID" != "true" ] || [ "$PAGE_OK" != "true" ]; then
-            echo "::error::Renewed token failed verification — keeping the previous one."
-            exit 1
-          fi
-
-          encrypt "$NEW"
-          commit_enc
-          echo "Token renewed, verified and stored in data/token.enc."
+          echo "::error::No user token available and page-token exchange cannot extend expiry. Add the FB_USER_TOKEN secret (any valid token from the Graph API Explorer) and re-run this workflow once — afterwards the cycle sustains itself."
+          exit 1

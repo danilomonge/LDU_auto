@@ -49,62 +49,63 @@ function pick(list, seed) {
 // the only emoji in the whole caption is the fixed ⚪️🔴 header marker.
 const cartesian = (leadIns, clauses) => leadIns.flatMap((a) => clauses.map((b) => `${a}, ${b}`));
 
+// Lead-ins are pure tone-setters (no specific claim), so they combine
+// cleanly with any clause in their bucket — chosen to share no root word
+// with their clause bank, avoiding "Con respeto, se respeta..." repeats.
 const FIXTURE_LEADINS = [
-  'Con confianza', 'Con determinación', 'Con el respaldo de la hinchada', 'Con paso firme',
-  'Con trabajo y disciplina', 'Con el mismo compromiso', 'Con la mente en el objetivo', 'Con responsabilidad',
-  'Con unión y esfuerzo', 'Con convicción',
+  'Con confianza', 'Con calma', 'Con determinación', 'Con humildad', 'Con respeto',
+  'Con paciencia', 'Con enfoque', 'Con actitud', 'Con seriedad', 'Con convicción',
 ];
 const FIXTURE_CLAUSES = [
-  'vamos por los tres puntos.', 'seguimos avanzando.', 'vamos con todo.', 'el equipo está listo.',
-  'la hinchada acompaña.', 'se define en la cancha.', 'cada partido cuenta.', 'el objetivo es claro.',
-  'se juega hasta el final.', 'el esfuerzo no se negocia.', 'la meta sigue firme.', 'se respeta a cada rival.',
-  'vamos paso a paso.', 'el compromiso es total.', 'se trabaja para ganar.', 'la constancia es clave.',
-  'el resultado se construye.', 'la unión hace la fuerza.', 'se cree en el equipo.', 'vamos Liga.',
+  'vamos por los tres puntos.', 'el equipo sale a ganar.', 'toca sumar de a tres.',
+  'la hinchada no falla.', 'se juega para ganar.', 'cada partido es una final.',
+  'no hay margen para relajarse.', 'vamos con toda la garra.', 'el objetivo está claro.',
+  'se juega de igual a igual.', 'la cancha dirá el resto.', 'vamos paso a paso.',
+  'el equipo está listo.', 'se juega hasta el final.', 'toca hacer respetar la camiseta.',
+  'vamos por el triunfo.', 'la meta no cambia: ganar.', 'se sale a competir sin miedo.',
+  'cada punto cuenta desde ya.', 'vamos Liga.',
 ];
 
 const WIN_LEADINS = [
-  'Con orgullo', 'Con satisfacción', 'Con el trabajo bien hecho', 'Con la hinchada feliz',
-  'Con méritos propios', 'Con constancia', 'Con la mira en lo que viene', 'Con el equipo unido',
-  'Con paso firme', 'Con la camiseta en alto',
+  'Con orgullo', 'Con satisfacción', 'Con alegría', 'Con humildad', 'Con gratitud',
+  'Con confianza', 'Con ilusión', 'Con la frente en alto', 'Con el trabajo bien hecho', 'Con espíritu ganador',
 ];
 const WIN_CLAUSES = [
-  'se suma un triunfo más.', 'el esfuerzo dio resultado.', 'el equipo respondió en la cancha.',
-  'se celebra este resultado.', 'la victoria se construyó en equipo.', 'se avanza en la tabla.',
-  'el objetivo sigue firme.', 'la hinchada disfruta este triunfo.', 'el trabajo se refleja en resultados.',
-  'la constancia dio sus frutos.', 'cada punto suma.', 'el compromiso se nota en la cancha.',
-  'se mantiene el buen nivel.', 'la unión hace la diferencia.', 'el camino sigue firme.',
-  'se agradece el apoyo de siempre.', 'la meta sigue en marcha.', 'el esfuerzo del equipo se reconoce.',
-  'la Liga sigue firme.', 'vamos por más.',
+  'se disfruta el triunfo.', 'el esfuerzo dio sus frutos.', 'el equipo respondió en la cancha.',
+  'se suma un triunfo más.', 'la hinchada sale feliz.', 'se avanza en la tabla.',
+  'el esfuerzo se refleja en el resultado.', 'cada punto cuenta, y este se festeja.', 'la Liga sigue firme.',
+  'vamos por más.', 'se celebra con altura.', 'el equipo dejó todo en la cancha.',
+  'la victoria se construyó en equipo.', 'sigue la buena racha.', 'el aguante de siempre se hizo sentir.',
+  'el marcador refleja el esfuerzo.', 'vamos con todo por el próximo.', 'se disfruta como se debe.',
+  'el equipo creció con este triunfo.', 'vamos por más triunfos así.',
 ];
 
 const DRAW_LEADINS = [
-  'Con altura', 'Con respeto por el rival', 'Con la mente en el próximo desafío', 'Con el trabajo de siempre',
-  'Con la calma necesaria', 'Con paso firme', 'Con la unión de siempre', 'Con la mira en el objetivo',
-  'Con serenidad', 'Con confianza en el proceso',
+  'Con calma', 'Con paciencia', 'Con humildad', 'Con respeto', 'Con confianza',
+  'Con serenidad', 'Con constancia', 'Con templanza', 'Con autocrítica', 'Con la mirada al frente',
 ];
 const DRAW_CLAUSES = [
-  'se suma un punto más.', 'el equipo sigue en la pelea.', 'se corrigen los detalles.',
-  'la meta sigue firme.', 'se trabaja para el próximo partido.', 'el esfuerzo se mantiene.',
-  'la constancia es el camino.', 'se avanza paso a paso.', 'el objetivo sigue vigente.',
-  'la unión sigue intacta.', 'se agradece el apoyo constante.', 'el compromiso no cambia.',
-  'se sigue trabajando en equipo.', 'la Liga sigue firme.', 'el proceso continúa.',
-  'se mantiene el enfoque.', 'cada punto cuenta.', 'se respeta el esfuerzo realizado.',
-  'la disciplina sigue firme.', 'vamos por el próximo.',
+  'se suma, aunque no alcanzó.', 'el equipo sigue en la pelea.', 'se corrigen detalles para el próximo.',
+  'un punto también cuenta.', 'la Liga sigue firme.', 'se trabaja para el próximo partido.',
+  'no se pierde de vista el objetivo.', 'el esfuerzo estuvo, faltó un poco más.', 'se avanza, aunque sea de a poco.',
+  'toca seguir sumando.', 'el punto también suma.', 'la hinchada sigue de pie.',
+  'el próximo partido es la revancha.', 'se sigue en carrera.', 'no se relaja la exigencia.',
+  'cada punto suma para el objetivo.', 'se aprende de cada partido.', 'la Liga no se rinde.',
+  'vamos por los tres en el próximo.', 'se sigue trabajando en equipo.',
 ];
 
 const LOSS_LEADINS = [
-  'Con la frente en alto', 'Con respeto por el esfuerzo', 'Con el apoyo de siempre', 'Con la mente en el próximo desafío',
-  'Con la unión de siempre', 'Con serenidad', 'Con confianza en el proceso', 'Con paso firme',
-  'Con la camiseta en alto', 'Con la hinchada de siempre',
+  'Con la frente en alto', 'Con respeto', 'Con humildad', 'Con calma', 'Con confianza',
+  'Con paciencia', 'Con serenidad', 'Con autocrítica', 'Con esperanza', 'Con el apoyo de siempre',
 ];
 const LOSS_CLAUSES = [
-  'se sigue trabajando para revertir el momento.', 'el equipo se levanta y sigue.',
-  'se corrigen los errores para el próximo partido.', 'el compromiso no cambia.', 'la Liga sigue firme.',
-  'se mantiene el respaldo de siempre.', 'el esfuerzo se reconoce.', 'la constancia no se pierde.',
-  'el objetivo sigue firme.', 'se trabaja para el próximo desafío.', 'la unión sigue intacta.',
-  'se agradece el apoyo constante.', 'el proceso continúa.', 'el equipo sigue de pie.',
-  'la disciplina sigue firme.', 'cada partido es una oportunidad.', 'se respeta el esfuerzo del equipo.',
-  'la Liga no baja los brazos.', 'se sigue creyendo en el equipo.', 'vamos por el próximo reto.',
+  'se levanta la cabeza y se sigue.', 'el equipo se repone y sigue.', 'se corrigen los errores.',
+  'la hinchada no suelta la mano.', 'la Liga sigue firme.', 'toca revertir el momento.',
+  'no se bajan los brazos.', 'el próximo partido es la oportunidad.', 'el esfuerzo se reconoce igual.',
+  'se sigue creyendo en el equipo.', 'un mal resultado no define la temporada.', 'se trabaja para el próximo desafío.',
+  'la hinchada sigue de pie.', 'se aprende y se sigue adelante.', 'el equipo no baja los brazos.',
+  'toca reponerse cuanto antes.', 'la Liga vuelve más fuerte.', 'se sigue de pie, siempre.',
+  'no se pierde la fe en el equipo.', 'vamos por la revancha.',
 ];
 
 const FIXTURE_CLOSERS = cartesian(FIXTURE_LEADINS, FIXTURE_CLAUSES); // 200
