@@ -1,8 +1,10 @@
 // Instagram publishing via the official Instagram Graph API.
 //
-// Requirements (GitHub Actions secrets → env):
-//   IG_USER_ID      Instagram Business/Creator account id
-//   IG_ACCESS_TOKEN Long-lived Page access token with instagram_content_publish
+// Supports publishing every post to MULTIPLE Instagram accounts. Each account
+// is an env pair (GitHub Actions secrets):
+//   IG_USER_ID + IG_ACCESS_TOKEN              account "instagram"
+//   FACEBOOK_USER_ID + FACEBOOK_ACCESS_TOKEN  account "facebook" (classic,
+//     page-linked; its token falls back to IG_ACCESS_TOKEN when unset)
 //   IMAGE_BASE_URL  Public base URL for output/posts (optional — derived from
 //                   GITHUB_REPOSITORY as a raw.githubusercontent.com URL)
 //
@@ -70,10 +72,37 @@ async function waitForContainer(graph, containerId, token, timeoutMs = 120000) {
   throw new Error('Timed out waiting for media container');
 }
 
+// Every configured account gets every post. The queue tracks per-account
+// success (item.publishedTo) so a partial failure never re-posts to an
+// account that already succeeded.
+export function configuredAccounts() {
+  const accounts = [];
+  if (process.env.IG_USER_ID && process.env.IG_ACCESS_TOKEN) {
+    accounts.push({ key: 'instagram', userId: process.env.IG_USER_ID, token: process.env.IG_ACCESS_TOKEN });
+  }
+  const fbToken = process.env.FACEBOOK_ACCESS_TOKEN || process.env.IG_ACCESS_TOKEN;
+  if (process.env.FACEBOOK_USER_ID && fbToken) {
+    accounts.push({ key: 'facebook', userId: process.env.FACEBOOK_USER_ID, token: fbToken });
+  }
+  return accounts;
+}
+
+async function publishTo(account, imageUrl, caption) {
+  const GRAPH = graphBase(account.token);
+  const container = await graphPost(`${GRAPH}/${account.userId}/media`, {
+    image_url: imageUrl,
+    caption,
+    access_token: account.token,
+  });
+  await waitForContainer(GRAPH, container.id, account.token);
+  return graphPost(`${GRAPH}/${account.userId}/media_publish`, {
+    creation_id: container.id,
+    access_token: account.token,
+  });
+}
+
 export async function publishPending() {
-  const userId = process.env.IG_USER_ID;
-  const token = process.env.IG_ACCESS_TOKEN;
-  const GRAPH = graphBase(token);
+  const accounts = configuredAccounts();
   const base = imageBaseUrl();
 
   const pending = loadPending();
@@ -81,8 +110,8 @@ export async function publishPending() {
     console.log('Nothing pending to publish.');
     return;
   }
-  if (!userId || !token) {
-    console.log(`Instagram credentials not configured (IG_USER_ID / IG_ACCESS_TOKEN). ` +
+  if (accounts.length === 0) {
+    console.log(`No Instagram accounts configured (IG_USER_ID/IG_ACCESS_TOKEN, FACEBOOK_USER_ID). ` +
       `${pending.length} post(s) remain queued in ${PATHS.pending}.`);
     return;
   }
@@ -91,34 +120,33 @@ export async function publishPending() {
     return;
   }
 
+  let failures = 0;
   const remaining = [];
   for (const item of pending) {
-    const imageUrl = `${base}/${encodeURIComponent(item.file)}`;
-    try {
-      if (!fs.existsSync(`${PATHS.outDir}/${item.file}`)) {
-        console.log(`Skipping ${item.file} — file missing locally, dropping from queue.`);
-        continue;
-      }
-      console.log(`Publishing ${item.file} …`);
-      const container = await graphPost(`${GRAPH}/${userId}/media`, {
-        image_url: imageUrl,
-        caption: item.caption,
-        access_token: token,
-      });
-      await waitForContainer(GRAPH, container.id, token);
-      const pub = await graphPost(`${GRAPH}/${userId}/media_publish`, {
-        creation_id: container.id,
-        access_token: token,
-      });
-      console.log(`Published ${item.file} → media id ${pub.id}`);
-    } catch (err) {
-      console.error(`Failed to publish ${item.file}: ${err.message}`);
-      remaining.push(item); // keep in queue, retried next run
+    if (!fs.existsSync(`${PATHS.outDir}/${item.file}`)) {
+      console.log(`Skipping ${item.file} — file missing locally, dropping from queue.`);
+      continue;
     }
+    const imageUrl = `${base}/${encodeURIComponent(item.file)}`;
+    item.publishedTo ||= [];
+    for (const account of accounts) {
+      if (item.publishedTo.includes(account.key)) continue;
+      try {
+        console.log(`Publishing ${item.file} → [${account.key}] …`);
+        const pub = await publishTo(account, imageUrl, item.caption);
+        console.log(`Published ${item.file} → [${account.key}] media id ${pub.id}`);
+        item.publishedTo.push(account.key);
+      } catch (err) {
+        console.error(`Failed to publish ${item.file} → [${account.key}]: ${err.message}`);
+        failures += 1;
+      }
+    }
+    const done = accounts.every((a) => item.publishedTo.includes(a.key));
+    if (!done) remaining.push(item); // retried next run for the missing accounts
   }
   savePending(remaining);
-  if (remaining.length) {
-    console.log(`${remaining.length} post(s) failed and remain queued.`);
+  if (failures) {
+    console.log(`${failures} publish attempt(s) failed; ${remaining.length} post(s) remain queued.`);
     process.exitCode = 1;
   }
 }
@@ -127,12 +155,18 @@ export async function publishPending() {
 // API and prints what the token can actually see, so misconfigured secrets
 // (wrong id, missing permissions) are identified from the Actions log.
 export async function diagnose() {
-  const userId = process.env.IG_USER_ID;
-  const token = process.env.IG_ACCESS_TOKEN;
-  if (!token) {
-    console.log('IG_ACCESS_TOKEN is not set.');
+  const accounts = configuredAccounts();
+  if (accounts.length === 0) {
+    console.log('No accounts configured (need IG_USER_ID+IG_ACCESS_TOKEN and/or FACEBOOK_USER_ID).');
     return;
   }
+  for (const account of accounts) {
+    console.log(`\n===== Account [${account.key}] =====`);
+    await diagnoseAccount(account.userId, account.token);
+  }
+}
+
+async function diagnoseAccount(userId, token) {
   const GRAPH = graphBase(token);
   console.log(`Token type: ${token.startsWith('IGA') ? 'Instagram login (IGA…)' : 'Facebook login (EAA…)'} → ${GRAPH}`);
 
