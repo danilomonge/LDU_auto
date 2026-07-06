@@ -1,0 +1,19 @@
+{
+  "name": "ldu_auto",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "generate": "node src/index.js generate",
+    "publish-posts": "node src/index.js publish",
+    "samples": "node src/index.js samples"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "playwright": "^1.61.1"
+  },
+  "type": "module"
+}

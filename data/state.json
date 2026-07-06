@@ -1,0 +1,109 @@
+{
+  "results": {
+    "729467": {
+      "baselined": true,
+      "date": "2025-02-02T00:00Z"
+    },
+    "401859491": {
+      "baselined": true,
+      "date": "2026-02-21T00:00Z"
+    },
+    "401859498": {
+      "baselined": true,
+      "date": "2026-03-01T17:00Z"
+    },
+    "401859503": {
+      "baselined": true,
+      "date": "2026-03-08T00:00Z"
+    },
+    "401859512": {
+      "baselined": true,
+      "date": "2026-03-15T00:00Z"
+    },
+    "401859523": {
+      "baselined": true,
+      "date": "2026-03-22T00:00Z"
+    },
+    "401859528": {
+      "baselined": true,
+      "date": "2026-04-04T00:00Z"
+    },
+    "401859540": {
+      "baselined": true,
+      "date": "2026-04-11T00:00Z"
+    },
+    "401859542": {
+      "baselined": true,
+      "date": "2026-04-19T20:30Z"
+    },
+    "401859554": {
+      "baselined": true,
+      "date": "2026-04-23T01:00Z"
+    },
+    "401859561": {
+      "baselined": true,
+      "date": "2026-04-25T22:00Z"
+    },
+    "401859565": {
+      "baselined": true,
+      "date": "2026-05-02T21:30Z"
+    },
+    "401859570": {
+      "baselined": true,
+      "date": "2026-05-12T00:00Z"
+    },
+    "401859583": {
+      "baselined": true,
+      "date": "2026-05-15T21:30Z"
+    },
+    "401859589": {
+      "baselined": true,
+      "date": "2026-05-24T00:00Z"
+    },
+    "401859594": {
+      "baselined": true,
+      "date": "2026-07-01T22:00Z"
+    },
+    "401859599": {
+      "posted": true,
+      "date": "2026-07-05T18:00Z",
+      "score": "1-0",
+      "name": "Macará vs LDU"
+    },
+    "401859700": {
+      "baselined": true,
+      "date": "2026-03-18T00:00Z"
+    },
+    "401865369": {
+      "baselined": true,
+      "date": "2026-04-08T00:00Z"
+    },
+    "401865490": {
+      "baselined": true,
+      "date": "2026-04-15T02:00Z"
+    },
+    "401865510": {
+      "baselined": true,
+      "date": "2026-04-28T22:00Z"
+    },
+    "401865527": {
+      "baselined": true,
+      "date": "2026-05-07T22:00Z"
+    },
+    "401865546": {
+      "baselined": true,
+      "date": "2026-05-21T00:30Z"
+    },
+    "401865561": {
+      "baselined": true,
+      "date": "2026-05-26T22:00Z"
+    }
+  },
+  "announcedFixture": {
+    "id": "401859608",
+    "fingerprint": "pre|||2026-07-12T17:00Z",
+    "name": "LDU vs Libertad",
+    "date": "2026-07-12T17:00Z"
+  },
+  "lastRun": "2026-07-06T08:33:25.572Z"
+}

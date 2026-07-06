@@ -1,0 +1,69 @@
+name: LDU Instagram posts
+
+on:
+  schedule:
+    # Every 30 minutes — the pipeline is a no-op unless ESPN state changed
+    # (new next match, rescheduled kickoff, or a freshly finished game).
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ldu-posts
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  generate-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Pull latest state committed by previous runs.
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate posts on state changes
+        run: node src/index.js generate
+
+      - name: Commit generated posts and state
+        id: commit
+        run: |
+          git config user.name "ldu-post-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A data output
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "posts: $(date -u +'%Y-%m-%d %H:%M') UTC"
+            git pull --rebase origin main
+            git push origin main
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish pending posts to Instagram
+        # Runs after push so the PNGs are reachable at their public raw URLs.
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IMAGE_BASE_URL: ${{ vars.IMAGE_BASE_URL }}
+        run: node src/index.js publish
+
+      - name: Commit publish-queue updates
+        run: |
+          git add -A data
+          if ! git diff --cached --quiet; then
+            git commit -m "publish: clear queue $(date -u +'%Y-%m-%d %H:%M') UTC"
+            git pull --rebase origin main
+            git push origin main
+          fi
