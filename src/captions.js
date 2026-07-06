@@ -2,24 +2,26 @@
 
 import { COMPETITION_TYPES, TEAM_ID, TIMEZONE } from './config.js';
 
-const fmtDay = new Intl.DateTimeFormat('es-EC', {
-  weekday: 'long', day: 'numeric', month: 'long', timeZone: TIMEZONE,
-});
 const fmtTime = new Intl.DateTimeFormat('es-EC', {
   hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TIMEZONE,
 });
 
-export function formatDayLine(dateIso) {
+// When ESPN marks the kickoff time as not confirmed (timeValid=false) the
+// placeholder must not be converted to local time — format the day in UTC
+// and show no time at all.
+export function formatDayLine(dateIso, timeValid = true) {
   // "DOM 12 · JULIO" style for the poster.
   const d = new Date(dateIso);
   const parts = new Intl.DateTimeFormat('es-EC', {
-    weekday: 'short', day: 'numeric', month: 'long', timeZone: TIMEZONE,
+    weekday: 'short', day: 'numeric', month: 'long',
+    timeZone: timeValid ? TIMEZONE : 'UTC',
   }).formatToParts(d);
   const get = (t) => parts.find((p) => p.type === t)?.value || '';
   return `${get('weekday').replace('.', '')} ${get('day')} · ${get('month')}`.toUpperCase();
 }
 
-export function formatTimeLine(dateIso) {
+export function formatTimeLine(dateIso, timeValid = true) {
+  if (!timeValid) return null;
   return fmtTime.format(new Date(dateIso));
 }
 
@@ -41,13 +43,17 @@ export function buildCaption(postType, match) {
   const score = `${cleanName(match.home.shortName)} ${match.home.score ?? '-'} - ${match.away.score ?? '-'} ${cleanName(match.away.shortName)}`;
 
   if (postType === 'fixture') {
-    const day = fmtDay.format(new Date(match.date));
-    const time = fmtTime.format(new Date(match.date));
+    const timeValid = match.timeValid !== false;
+    const day = new Intl.DateTimeFormat('es-EC', {
+      weekday: 'long', day: 'numeric', month: 'long',
+      timeZone: timeValid ? TIMEZONE : 'UTC',
+    }).format(new Date(match.date));
+    const time = timeValid ? `${fmtTime.format(new Date(match.date))} (Ecuador)` : 'Hora por confirmar';
     const venue = match.venue ? `\n🏟️ ${match.venue}${match.city ? `, ${match.city}` : ''}` : '';
     return (
       `⚪️🔵 ¡Se viene un nuevo reto! LDU enfrenta a ${cleanName(rival.name)} ${where} por ${comp.label}.` +
       `\n\n📅 ${day.charAt(0).toUpperCase() + day.slice(1)}` +
-      `\n⏰ ${time} (Ecuador)` +
+      `\n⏰ ${time}` +
       venue +
       `\n\n¡Vamos Liga! 💪\n\n${comp.hashtags}`
     );

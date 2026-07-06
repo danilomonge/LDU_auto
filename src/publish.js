@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import { loadPending, savePending } from './state.js';
 import { PATHS } from './config.js';
 
-const GRAPH = 'https://graph.facebook.com/v21.0';
+const GRAPH = 'https://graph.facebook.com/v23.0';
 
 function imageBaseUrl() {
   if (process.env.IMAGE_BASE_URL) return process.env.IMAGE_BASE_URL.replace(/\/$/, '');

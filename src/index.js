@@ -31,8 +31,8 @@ async function renderPost(match, type, outDir) {
     match,
     homeLogo,
     awayLogo,
-    dayLine: formatDayLine(match.date),
-    timeLine: formatTimeLine(match.date),
+    dayLine: formatDayLine(match.date, match.timeValid),
+    timeLine: formatTimeLine(match.date, match.timeValid),
   });
   const file = `${match.date.slice(0, 10)}_${match.id}_${type}.png`;
   const outPath = path.join(outDir, file);

@@ -76,5 +76,34 @@ export function buildSampleMatches() {
     }
     day += 1;
   }
+
+  // Edge cases: unconfirmed kickoff time + unknown venue, and long names.
+  out.push({
+    type: 'fixture',
+    match: {
+      id: 'sample-edge-tbd',
+      date: '2026-08-20T00:00Z',
+      timeValid: false,
+      competitionType: 'ligapro',
+      state: 'pre', completed: false,
+      venue: null, city: null, country: null,
+      home: team('9283', 'Universidad Católica (Quito)', 'Universidad Católica (Quito)', 'UCA'),
+      away: LDU(),
+      lduIsHome: false,
+    },
+  });
+  out.push({
+    type: 'result',
+    match: {
+      id: 'sample-edge-long',
+      date: '2026-08-21T00:30Z',
+      competitionType: 'libertadores',
+      state: 'post', completed: true,
+      venue: 'Estadio Banco del Austro Alejandro Serrano Aguilar', city: 'Cuenca', country: 'Ecuador',
+      home: { ...team('17086', 'Independiente del Valle', 'Independiente del Valle', 'IDV'), score: '2', winner: false },
+      away: { ...LDU(), score: '2', winner: false },
+      lduIsHome: false,
+    },
+  });
   return out;
 }

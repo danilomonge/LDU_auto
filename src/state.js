@@ -67,13 +67,18 @@ export function planPosts(matches, state, now = new Date()) {
     }
   }
 
+  // Only results that finished recently are announced; anything older that we
+  // have never seen (e.g. ESPN backfilling a competition's history) is
+  // baselined silently instead of being spammed to the feed.
+  const MAX_RESULT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
   const completed = matches
     .filter((m) => m.completed)
     .sort((a, b) => new Date(a.date) - new Date(b.date));
   for (const m of completed) {
     if (state.results[m.id]) continue;
     const isLatest = m.id === completed[completed.length - 1]?.id;
-    if (first && !isLatest) {
+    const tooOld = now - new Date(m.date) > MAX_RESULT_AGE_MS;
+    if ((first && !isLatest) || tooOld) {
       state.results[m.id] = { baselined: true, date: m.date };
       continue;
     }

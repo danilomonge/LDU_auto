@@ -67,6 +67,9 @@ function normalizeEvent(event, leagueSlug, leagueName) {
   return {
     id: event.id,
     date: event.date, // ISO UTC
+    // ESPN sets timeValid=false when only the day is known; the placeholder
+    // time must then not be shown (nor shifted across timezones).
+    timeValid: event.timeValid !== false,
     league: leagueSlug,
     leagueName,
     competitionType: classifyCompetition(leagueSlug, leagueName),
@@ -107,8 +110,12 @@ export async function fetchAllMatches() {
   const byId = new Map();
   for (const m of results.flat()) {
     const prev = byId.get(m.id);
-    // Prefer the entry with scores/final status if duplicated.
-    if (!prev || (m.state === 'post' && prev.state !== 'post')) byId.set(m.id, m);
+    // Prefer final status; among equals prefer the entry that knows the venue.
+    const better =
+      !prev ||
+      (m.state === 'post' && prev.state !== 'post') ||
+      (m.state === prev.state && !prev.venue && !!m.venue);
+    if (better) byId.set(m.id, m);
   }
   return [...byId.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
 }

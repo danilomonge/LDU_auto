@@ -2,6 +2,34 @@
 // per competition: deep gradient backdrop, faint pitch line-art, dot grid,
 // glass panels and a single accent color per tournament.
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Fonts are bundled (assets/fonts) and inlined as data URIs so rendering
+// never depends on Google Fonts being reachable. All three are variable
+// fonts covering the full weight range.
+const FONTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'assets', 'fonts');
+const fontUri = (file) =>
+  `data:font/woff2;base64,${fs.readFileSync(path.join(FONTS_DIR, file)).toString('base64')}`;
+const FONT_CSS = `
+  @font-face {
+    font-family: 'Archivo Expanded';
+    font-weight: 100 1000;
+    src: url(${fontUri('archivo-expanded.woff2')}) format('woff2');
+  }
+  @font-face {
+    font-family: 'Archivo';
+    font-weight: 100 1000;
+    src: url(${fontUri('archivo.woff2')}) format('woff2');
+  }
+  @font-face {
+    font-family: 'Space Grotesk';
+    font-weight: 100 1000;
+    src: url(${fontUri('spacegrotesk.woff2')}) format('woff2');
+  }
+`;
+
 export const THEMES = {
   ligapro: {
     bg0: '#050d2e', bg1: '#0a1a54', bg2: '#040820',
@@ -114,7 +142,7 @@ export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, t
     : `
       <div class="center">
         <div class="vs">VS</div>
-        <div class="kickoff">${esc(timeLine)}</div>
+        <div class="kickoff ${timeLine ? '' : 'tbd'}">${esc(timeLine ?? 'POR CONFIRMAR')}</div>
       </div>`;
 
   // The footer label already says "ESTADIO", so drop a redundant prefix.
@@ -127,10 +155,8 @@ export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, t
 
   return `<!doctype html>
 <html><head><meta charset="utf-8"/>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Archivo+Expanded:wght@600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
+  ${FONT_CSS}
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 1080px; height: 1350px; }
   .poster {
@@ -216,7 +242,9 @@ export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, t
     padding: 13px 28px; border-radius: 14px;
     border: 1px solid rgba(255,255,255,0.16);
     background: rgba(255,255,255,0.05);
+    white-space: nowrap;
   }
+  .kickoff.tbd { font-size: 22px; letter-spacing: 0.16em; padding: 12px 22px; }
   .score { display: flex; align-items: center; justify-content: center; gap: 26px; }
   .score .s {
     font-family: 'Archivo Expanded', sans-serif;
@@ -240,6 +268,8 @@ export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, t
   footer { position: relative; z-index: 2; }
   .foot-rule { height: 1px; background: rgba(255,255,255,0.14); margin-bottom: 44px; }
   .foot-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; }
+  .foot-row > .venue-box { flex: 1; min-width: 0; }
+  .foot-row > .datebox { flex-shrink: 0; }
   .venue-label {
     font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 500;
     letter-spacing: 0.3em; color: ${theme.inkDim}; margin-bottom: 14px;
@@ -248,6 +278,7 @@ export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, t
     font-family: 'Archivo Expanded', sans-serif; font-size: 34px; font-weight: 800;
     letter-spacing: 0.04em; line-height: 1.25; max-width: 640px;
   }
+  .venue.long { font-size: 27px; }
   .venue small { display: block; font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 500; letter-spacing: 0.24em; color: ${theme.inkDim}; margin-top: 10px; }
   .datebox { text-align: right; flex-shrink: 0; }
   .date-day {
@@ -279,13 +310,13 @@ export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, t
     <footer>
       <div class="foot-rule"></div>
       <div class="foot-row">
-        <div>
+        <div class="venue-box">
           <div class="venue-label">ESTADIO</div>
-          <div class="venue">${venueLine}${cityLine ? `<small>${cityLine}</small>` : ''}</div>
+          <div class="venue ${venueLine.length > 26 ? 'long' : ''}">${venueLine}${cityLine ? `<small>${cityLine}</small>` : ''}</div>
         </div>
         <div class="datebox">
           <div class="date-day">${esc(dayLine)}</div>
-          <div class="date-sub">${isResult ? 'PARTIDO FINALIZADO' : `${esc(timeLine)} · ECUADOR`}</div>
+          <div class="date-sub">${isResult ? 'PARTIDO FINALIZADO' : timeLine ? `${esc(timeLine)} · ECUADOR` : 'HORA POR CONFIRMAR'}</div>
         </div>
       </div>
     </footer>
