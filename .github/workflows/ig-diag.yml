@@ -1,7 +1,12 @@
 name: Instagram credentials diagnostic
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      deep:
+        description: 'Also verify WRITE permission (creates nothing visible)'
+        type: boolean
+        default: false
 
 jobs:
   diag:
@@ -31,4 +36,4 @@ jobs:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           FACEBOOK_USER_ID: ${{ secrets.FACEBOOK_USER_ID }}
           FACEBOOK_ACCESS_TOKEN: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
-        run: node src/index.js diag
+        run: node src/index.js diag ${{ inputs.deep && '--deep' || '' }}

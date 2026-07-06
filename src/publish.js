@@ -175,7 +175,7 @@ export async function publishPending() {
 // Diagnostic mode: validates the configured credentials against the Graph
 // API and prints what the token can actually see, so misconfigured secrets
 // (wrong id, missing permissions) are identified from the Actions log.
-export async function diagnose() {
+export async function diagnose(deep = false) {
   const accounts = configuredAccounts();
   if (accounts.length === 0) {
     console.log('No accounts configured (need IG_USER_ID+IG_ACCESS_TOKEN and/or FACEBOOK_USER_ID).');
@@ -184,6 +184,38 @@ export async function diagnose() {
   for (const account of accounts) {
     console.log(`\n===== Account [${account.key}] (${account.type === 'page' ? 'Facebook Page feed' : 'Instagram'}) =====`);
     await diagnoseAccount(account.userId, account.token, account.type);
+    if (deep) await deepWriteCheck(account);
+  }
+}
+
+// Proves WRITE permission without anything becoming visible:
+//  - Instagram: create a media container and never publish it (containers
+//    are invisible and expire after 24h).
+//  - Page: upload an UNpublished photo, then delete it immediately.
+const TEST_IMAGE = 'https://a.espncdn.com/i/teamlogos/soccer/500/4816.png';
+
+async function deepWriteCheck(account) {
+  try {
+    if (account.type === 'page') {
+      const photo = await graphPost(`https://graph.facebook.com/v23.0/${account.userId}/photos`, {
+        url: TEST_IMAGE,
+        published: 'false',
+        access_token: account.token,
+      });
+      await fetch(`https://graph.facebook.com/v23.0/${photo.id}?access_token=${encodeURIComponent(account.token)}`, { method: 'DELETE' });
+      console.log(`WRITE CHECK OK — unpublished page photo created (${photo.id}) and deleted.`);
+    } else {
+      const GRAPH = graphBase(account.token);
+      const container = await graphPost(`${GRAPH}/${account.userId}/media`, {
+        image_url: TEST_IMAGE,
+        caption: 'diagnostic container — never published',
+        access_token: account.token,
+      });
+      console.log(`WRITE CHECK OK — media container created (${container.id}), left unpublished (auto-expires in 24h).`);
+    }
+  } catch (err) {
+    console.log(`WRITE CHECK FAILED: ${err.message}`);
+    process.exitCode = 1;
   }
 }
 

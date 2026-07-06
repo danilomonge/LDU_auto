@@ -102,7 +102,7 @@ try {
   else if (mode === 'publish') await publishPending();
   else if (mode === 'cleanup') await cleanup();
   else if (mode === 'samples') await samples();
-  else if (mode === 'diag') await diagnose();
+  else if (mode === 'diag') await diagnose(process.argv.includes('--deep'));
   else {
     console.error(`Unknown mode: ${mode}`);
     process.exit(1);
