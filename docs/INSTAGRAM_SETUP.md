@@ -75,12 +75,44 @@ curl "https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_tok
 Solo funciona con tokens que tengan al menos 24 h de antigüedad y aún no
 hayan caducado. Si caducó, repite el paso 3 (un minuto).
 
-## Alternativa: flujo clásico con página de Facebook
+## Alternativa: flujo clásico con página de Facebook (Graph API Explorer)
 
-Si ya tienes tu Instagram vinculado a una página de Facebook también sirve el
-flujo clásico (token `EAA…` con permisos `instagram_basic`,
-`instagram_content_publish`, `pages_show_list`): el sistema detecta el tipo de
-token automáticamente y usa el host correcto de la Graph API.
+Si tu Instagram está vinculado a una página de Facebook:
+
+1. Abre el [Graph API Explorer](https://developers.facebook.com/tools/explorer),
+   selecciona tu app.
+2. En *Permissions* añade **todas** estas: `instagram_basic`,
+   `instagram_content_publish`, `pages_show_list`, `pages_read_engagement`,
+   `business_management`.
+3. *Generate Access Token* → autoriza. Esto da un **token de usuario de corta
+   duración (~1-2 h)** — no lo uses directamente como secret.
+4. Cámbialo por uno de **larga duración (60 días)** (App ID y App Secret están
+   en *App settings → Basic*):
+
+   ```bash
+   curl "https://graph.facebook.com/v23.0/oauth/access_token?grant_type=fb_exchange_token&client_id=APP_ID&client_secret=APP_SECRET&fb_exchange_token=TOKEN_CORTO"
+   ```
+
+5. (Opcional, recomendado) Con ese token largo pide el **token de página, que
+   no caduca nunca**:
+
+   ```bash
+   curl "https://graph.facebook.com/v23.0/me/accounts?fields=name,access_token&access_token=TOKEN_LARGO"
+   ```
+
+   Usa el `access_token` de tu página como `IG_ACCESS_TOKEN` permanente.
+6. El `IG_USER_ID` es el id de `instagram_business_account` (no el id de la
+   página): el workflow **"Instagram credentials diagnostic"** (pestaña
+   Actions) lo imprime una vez configurado el token.
+
+El sistema detecta el tipo de token automáticamente (`EAA…` →
+`graph.facebook.com`, `IGAA…` → `graph.instagram.com`).
+
+## Diagnóstico
+
+Con los secrets puestos, corre el workflow **Instagram credentials
+diagnostic** (Actions → Run workflow). Imprime el tipo de token, sus permisos
+reales, su fecha de caducidad, y el `IG_USER_ID` correcto de cada página.
 
 ## Errores comunes al publicar
 
