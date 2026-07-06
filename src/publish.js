@@ -75,14 +75,22 @@ async function waitForContainer(graph, containerId, token, timeoutMs = 120000) {
 // Every configured account gets every post. The queue tracks per-account
 // success (item.publishedTo) so a partial failure never re-posts to an
 // account that already succeeded.
+// Secrets pasted with stray whitespace, newlines or quotes are a classic
+// source of "Cannot parse access token" — sanitize defensively.
+const cleanEnv = (name) =>
+  process.env[name]?.replace(/["'\s]/g, '') || undefined;
+
 export function configuredAccounts() {
   const accounts = [];
-  if (process.env.IG_USER_ID && process.env.IG_ACCESS_TOKEN) {
-    accounts.push({ key: 'instagram', userId: process.env.IG_USER_ID, token: process.env.IG_ACCESS_TOKEN });
+  const igId = cleanEnv('IG_USER_ID');
+  const igToken = cleanEnv('IG_ACCESS_TOKEN');
+  if (igId && igToken) {
+    accounts.push({ key: 'instagram', userId: igId, token: igToken });
   }
-  const fbToken = process.env.FACEBOOK_ACCESS_TOKEN || process.env.IG_ACCESS_TOKEN;
-  if (process.env.FACEBOOK_USER_ID && fbToken) {
-    accounts.push({ key: 'facebook', userId: process.env.FACEBOOK_USER_ID, token: fbToken });
+  const fbId = cleanEnv('FACEBOOK_USER_ID');
+  const fbToken = cleanEnv('FACEBOOK_ACCESS_TOKEN') || igToken;
+  if (fbId && fbToken) {
+    accounts.push({ key: 'facebook', userId: fbId, token: fbToken });
   }
   return accounts;
 }
@@ -169,6 +177,9 @@ export async function diagnose() {
 async function diagnoseAccount(userId, token) {
   const GRAPH = graphBase(token);
   console.log(`Token type: ${token.startsWith('IGA') ? 'Instagram login (IGA…)' : 'Facebook login (EAA…)'} → ${GRAPH}`);
+  console.log(`Token shape: starts "${token.slice(0, 3)}…", length ${token.length} chars` +
+    (token.length < 100 ? '  ← SUSPICIOUSLY SHORT, probably an incomplete paste' : ''));
+  console.log(`User id: ${/^\d+$/.test(userId) ? `numeric, ${userId.length} digits` : 'NOT numeric ← should be a number'}`);
 
   // debug_token reveals the token's real type, granted scopes and expiry —
   // the definitive answer to "why does publishing fail".
