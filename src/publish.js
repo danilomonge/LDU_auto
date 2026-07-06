@@ -136,12 +136,28 @@ export async function diagnose() {
   const GRAPH = graphBase(token);
   console.log(`Token type: ${token.startsWith('IGA') ? 'Instagram login (IGA…)' : 'Facebook login (EAA…)'} → ${GRAPH}`);
 
+  // debug_token reveals the token's real type, granted scopes and expiry —
+  // the definitive answer to "why does publishing fail".
+  if (!token.startsWith('IGA')) {
+    try {
+      const dbg = await graphGet(`${GRAPH}/debug_token`, { input_token: token, access_token: token });
+      const d = dbg.data || {};
+      console.log(`debug_token → type: ${d.type}, valid: ${d.is_valid}, app: ${d.application ?? '?'}`);
+      console.log(`  expires: ${d.expires_at ? new Date(d.expires_at * 1000).toISOString() : 'never/unknown'}`);
+      console.log(`  scopes: ${(d.scopes || []).join(', ') || '(none reported)'}`);
+      const needed = ['instagram_basic', 'instagram_content_publish'];
+      const missing = needed.filter((s) => !(d.scopes || []).includes(s));
+      if (missing.length) console.log(`  MISSING required scopes: ${missing.join(', ')}`);
+    } catch (err) {
+      console.log(`debug_token failed: ${err.message}`);
+    }
+  }
+
   try {
     const me = await graphGet(`${GRAPH}/me`, { fields: 'id,name', access_token: token });
     console.log(`Token belongs to: ${me.name ?? '(no name)'}`);
   } catch (err) {
-    console.log(`Token is INVALID or expired: ${err.message}`);
-    return;
+    console.log(`GET /me failed (typical for Page tokens without pages_read_engagement): ${err.message}`);
   }
 
   if (userId) {
