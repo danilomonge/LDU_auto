@@ -1,56 +1,116 @@
 name: Renew Meta access token
 
-# Exchanges the long-lived user token for a fresh 60-day one and derives a new
-# Page token, then writes both back to the repo secrets. Running monthly means
-# the tokens never reach their 60-day expiry.
+# Self-renewing token, no GitHub PAT required. The current Page token lives
+# AES-256-encrypted in data/token.enc (key = TOKEN_KEY secret). Twice a month
+# this workflow decrypts it, exchanges it for a fresh 60-day token via the
+# Meta app credentials, verifies the new token actually works, re-encrypts
+# and commits it. Publishing workflows decrypt data/token.enc at runtime, so
+# no secret ever needs manual updating again.
 #
-# Required secrets:
-#   FB_APP_ID / FB_APP_SECRET  from the Meta app (Settings → Basic)
-#   FB_USER_TOKEN              a long-lived USER token (60 days)
-#   FACEBOOK_USER_ID           the Facebook page id (already set)
-#   GH_PAT                     GitHub token with repo secrets write access
-#                              (fine-grained PAT: this repo → Secrets: R/W)
+# Secrets used:
+#   TOKEN_KEY        encryption key (random, never changes)
+#   FB_APP_ID / FB_APP_SECRET  Meta app credentials (never expire)
+#   IG_ACCESS_TOKEN  only as seed/fallback for the first run
+#   FB_USER_TOKEN    optional fallback path (user-token exchange)
+#   FACEBOOK_USER_ID page id, used to verify the renewed token
 
 on:
   schedule:
-    - cron: '0 12 1 * *' # monthly, day 1 at 12:00 UTC
+    - cron: '0 12 1,15 * *' # twice a month — 4 chances per 60-day token life
   workflow_dispatch: {}
+
+concurrency:
+  group: ldu-posts # never race the publishing workflow's commits
+  cancel-in-progress: false
+
+permissions:
+  contents: write
 
 jobs:
   renew:
     runs-on: ubuntu-latest
     steps:
-      - name: Exchange tokens and update secrets
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Renew, verify and store token
         env:
+          TOKEN_KEY: ${{ secrets.TOKEN_KEY }}
           FB_APP_ID: ${{ secrets.FB_APP_ID }}
           FB_APP_SECRET: ${{ secrets.FB_APP_SECRET }}
           FB_USER_TOKEN: ${{ secrets.FB_USER_TOKEN }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           FACEBOOK_USER_ID: ${{ secrets.FACEBOOK_USER_ID }}
-          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
-          if [ -z "$FB_APP_ID" ] || [ -z "$FB_APP_SECRET" ] || [ -z "$FB_USER_TOKEN" ] || [ -z "$GH_TOKEN" ]; then
-            echo "Missing secrets (need FB_APP_ID, FB_APP_SECRET, FB_USER_TOKEN, GH_PAT). Skipping."
+          GRAPH="https://graph.facebook.com/v23.0"
+          decrypt() { openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass env:TOKEN_KEY -base64 -A -in data/token.enc; }
+          encrypt() { printf %s "$1" | openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass env:TOKEN_KEY -base64 -A -out data/token.enc; }
+          commit_enc() {
+            git config user.name "ldu-post-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add data/token.enc
+            git diff --cached --quiet || { git commit -m "token: renewed $(date -u +%F)"; git pull --rebase origin main; git push origin main; }
+          }
+
+          if [ -z "${TOKEN_KEY:-}" ]; then
+            echo "::error::TOKEN_KEY secret is not set."
+            exit 1
+          fi
+
+          # Current token: encrypted store, else the seed secret.
+          if [ -f data/token.enc ]; then
+            CURRENT=$(decrypt)
+          else
+            CURRENT="${IG_ACCESS_TOKEN:-}"
+          fi
+          if [ -z "$CURRENT" ]; then
+            echo "::error::No current token available (no data/token.enc and IG_ACCESS_TOKEN unset)."
+            exit 1
+          fi
+          echo "::add-mask::$CURRENT"
+
+          if [ -z "${FB_APP_ID:-}" ] || [ -z "${FB_APP_SECRET:-}" ]; then
+            if [ ! -f data/token.enc ]; then
+              encrypt "$CURRENT"
+              commit_enc
+              echo "Seeded data/token.enc from IG_ACCESS_TOKEN."
+            fi
+            echo "::warning::FB_APP_ID / FB_APP_SECRET not set — cannot renew. Token will expire unless these secrets are added."
             exit 0
           fi
 
-          # 1) Fresh 60-day user token (exchanging resets the clock).
-          NEW_USER=$(curl -sf "https://graph.facebook.com/v23.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${FB_APP_ID}&client_secret=${FB_APP_SECRET}&fb_exchange_token=${FB_USER_TOKEN}" | jq -r '.access_token // empty')
-          if [ -z "$NEW_USER" ]; then
-            echo "::error::Token exchange failed — FB_USER_TOKEN may be expired. Regenerate it manually (docs/INSTAGRAM_SETUP.md)."
+          # Primary path: exchange the current (page) token directly.
+          NEW=$(curl -s "$GRAPH/oauth/access_token?grant_type=fb_exchange_token&client_id=${FB_APP_ID}&client_secret=${FB_APP_SECRET}&fb_exchange_token=${CURRENT}" | jq -r '.access_token // empty')
+
+          # Fallback path: fresh user-token exchange → page token.
+          if [ -z "$NEW" ] && [ -n "${FB_USER_TOKEN:-}" ]; then
+            echo "Direct exchange failed; trying the user-token path."
+            NU=$(curl -s "$GRAPH/oauth/access_token?grant_type=fb_exchange_token&client_id=${FB_APP_ID}&client_secret=${FB_APP_SECRET}&fb_exchange_token=${FB_USER_TOKEN}" | jq -r '.access_token // empty')
+            if [ -n "$NU" ]; then
+              echo "::add-mask::$NU"
+              NEW=$(curl -s "$GRAPH/me/accounts?fields=id,access_token&access_token=${NU}" | jq -r --arg id "${FACEBOOK_USER_ID:-}" '.data[] | select(.id==$id) | .access_token // empty')
+            fi
+          fi
+
+          if [ -z "$NEW" ]; then
+            echo "::error::Token renewal failed on every path. Manual action needed (docs/INSTAGRAM_SETUP.md)."
             exit 1
           fi
-          echo "::add-mask::$NEW_USER"
+          echo "::add-mask::$NEW"
 
-          # 2) Fresh page token for the configured page.
-          NEW_PAGE=$(curl -sf "https://graph.facebook.com/v23.0/me/accounts?fields=id,access_token&access_token=${NEW_USER}" | jq -r --arg id "$FACEBOOK_USER_ID" '.data[] | select(.id==$id) | .access_token // empty')
-          if [ -z "$NEW_PAGE" ]; then
-            echo "::error::Could not derive a page token for FACEBOOK_USER_ID."
+          # Verify before storing: token must be valid AND able to read the page.
+          VALID=$(curl -s "$GRAPH/debug_token?input_token=${NEW}&access_token=${NEW}" | jq -r '.data.is_valid // false')
+          PAGE_OK=true
+          if [ -n "${FACEBOOK_USER_ID:-}" ]; then
+            PAGE_OK=$(curl -s "$GRAPH/${FACEBOOK_USER_ID}?fields=id&access_token=${NEW}" | jq -r 'has("id")')
+          fi
+          if [ "$VALID" != "true" ] || [ "$PAGE_OK" != "true" ]; then
+            echo "::error::Renewed token failed verification — keeping the previous one."
             exit 1
           fi
-          echo "::add-mask::$NEW_PAGE"
 
-          # 3) Persist both for the next cycle.
-          gh secret set FB_USER_TOKEN --body "$NEW_USER" -R "$GITHUB_REPOSITORY"
-          gh secret set IG_ACCESS_TOKEN --body "$NEW_PAGE" -R "$GITHUB_REPOSITORY"
-          echo "Tokens renewed: fresh 60-day user token + page token stored."
+          encrypt "$NEW"
+          commit_enc
+          echo "Token renewed, verified and stored in data/token.enc."

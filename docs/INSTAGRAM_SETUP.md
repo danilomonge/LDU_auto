@@ -65,26 +65,27 @@ los futuros.
 
 ## Renovación automática (token "eterno")
 
-El workflow **"Renew Meta access token"** corre el día 1 de cada mes y renueva
-solo los tokens (cada intercambio da 60 días frescos, así que nunca caducan).
-Para activarlo añade estos secrets una única vez:
+El workflow **"Renew Meta access token"** corre los días 1 y 15 de cada mes.
+El token vigente vive cifrado (AES-256) en `data/token.enc`; el workflow lo
+descifra, lo intercambia por uno fresco de 60 días con las credenciales de la
+app, **verifica que el nuevo funciona** y lo vuelve a cifrar y commitear. Los
+workflows de publicación y diagnóstico lo descifran en cada ejecución. Sin
+PAT de GitHub y sin tocar secrets nunca más.
 
-| Secret | Valor |
-| --- | --- |
-| `FB_APP_ID` | App ID (app → *Settings → Basic*) |
-| `FB_APP_SECRET` | App Secret (mismo lugar, botón *Show*) |
-| `FB_USER_TOKEN` | un token de usuario de larga duración (el del paso 2 del flujo clásico) |
-| `GH_PAT` | token de GitHub con permiso de escritura de secrets en este repo* |
+Secrets que usa:
 
-\* En <https://github.com/settings/personal-access-tokens> → *Generate new
-token (fine-grained)* → Repository access: solo `LDU_auto` → Permissions →
-**Secrets: Read and write**. Caduca máximo al año; GitHub te avisa por email
-para regenerarlo.
+| Secret | Valor | ¿Caduca? |
+| --- | --- | --- |
+| `TOKEN_KEY` | clave de cifrado aleatoria (ya instalada) | no |
+| `FB_APP_ID` | App ID (app → *Settings → Basic*) | no |
+| `FB_APP_SECRET` | App Secret (mismo lugar, botón *Show*) | no |
+| `FB_USER_TOKEN` | *(opcional)* token de usuario de 60 días, ruta de respaldo | 60 días |
+| `IG_ACCESS_TOKEN` | solo como semilla del primer arranque | — |
 
-El workflow actualiza `FB_USER_TOKEN` e `IG_ACCESS_TOKEN` automáticamente.
-Si el token muriera antes de la primera renovación (p. ej. por cambio de
-contraseña de Facebook, que invalida todos los tokens), regenera
-`FB_USER_TOKEN` a mano y el ciclo se retoma.
+Si una renovación falla (p. ej. cambiaste la contraseña de Facebook, lo que
+invalida todos los tokens), el workflow falla → GitHub te avisa por email →
+regeneras un token a mano (sección siguiente), lo pones en `IG_ACCESS_TOKEN`,
+borras `data/token.enc` del repo y el ciclo se re-siembra solo.
 
 Alternativa 100 % oficial sin renovaciones: un **System User** en
 [business.facebook.com](https://business.facebook.com) (*Configuración del

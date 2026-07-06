@@ -56,11 +56,27 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Resolve access token
+        # Prefer the auto-renewed encrypted token (data/token.enc) over the
+        # static IG_ACCESS_TOKEN secret.
+        env:
+          TOKEN_KEY: ${{ secrets.TOKEN_KEY }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          T="$IG_ACCESS_TOKEN"
+          if [ -n "$TOKEN_KEY" ] && [ -f data/token.enc ]; then
+            T=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass env:TOKEN_KEY -base64 -A -in data/token.enc)
+            echo "Using auto-renewed token from data/token.enc"
+          else
+            echo "Using IG_ACCESS_TOKEN secret directly"
+          fi
+          echo "::add-mask::$T"
+          echo "IG_ACCESS_TOKEN=$T" >> "$GITHUB_ENV"
+
       - name: Publish pending posts to Instagram
         # Runs after push so the PNGs are reachable at their public raw URLs.
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
-          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           FACEBOOK_USER_ID: ${{ secrets.FACEBOOK_USER_ID }}
           FACEBOOK_ACCESS_TOKEN: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
           IMAGE_BASE_URL: ${{ vars.IMAGE_BASE_URL }}
