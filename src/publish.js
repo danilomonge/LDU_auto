@@ -14,7 +14,16 @@ import fs from 'node:fs';
 import { loadPending, savePending } from './state.js';
 import { PATHS } from './config.js';
 
-const GRAPH = 'https://graph.facebook.com/v23.0';
+// Two official token flavors are supported, auto-detected by prefix:
+//  - "IGA…"  Instagram API with Instagram Login (new flow, no Facebook page
+//            required) → graph.instagram.com
+//  - "EAA…"  Facebook Login / Page token (classic flow) → graph.facebook.com
+// Both expose identical /media, /media_publish and status endpoints.
+function graphBase(token) {
+  return token?.startsWith('IGA')
+    ? 'https://graph.instagram.com/v23.0'
+    : 'https://graph.facebook.com/v23.0';
+}
 
 function imageBaseUrl() {
   if (process.env.IMAGE_BASE_URL) return process.env.IMAGE_BASE_URL.replace(/\/$/, '');
@@ -47,10 +56,10 @@ async function graphGet(url, params) {
   return json;
 }
 
-async function waitForContainer(containerId, token, timeoutMs = 120000) {
+async function waitForContainer(graph, containerId, token, timeoutMs = 120000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const st = await graphGet(`${GRAPH}/${containerId}`, {
+    const st = await graphGet(`${graph}/${containerId}`, {
       fields: 'status_code',
       access_token: token,
     });
@@ -64,6 +73,7 @@ async function waitForContainer(containerId, token, timeoutMs = 120000) {
 export async function publishPending() {
   const userId = process.env.IG_USER_ID;
   const token = process.env.IG_ACCESS_TOKEN;
+  const GRAPH = graphBase(token);
   const base = imageBaseUrl();
 
   const pending = loadPending();
@@ -95,7 +105,7 @@ export async function publishPending() {
         caption: item.caption,
         access_token: token,
       });
-      await waitForContainer(container.id, token);
+      await waitForContainer(GRAPH, container.id, token);
       const pub = await graphPost(`${GRAPH}/${userId}/media_publish`, {
         creation_id: container.id,
         access_token: token,

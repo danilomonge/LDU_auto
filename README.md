@@ -38,9 +38,14 @@ Los posts quedan en `output/posts/` (PNG + caption `.txt`) y se encolan en
 
 ## Configuración de la publicación en Instagram
 
-Requisitos: cuenta de Instagram **Business o Creator** vinculada a una página
-de Facebook, y una app en [developers.facebook.com](https://developers.facebook.com)
-con el permiso `instagram_content_publish`.
+**Guía paso a paso (incluye soluciones a problemas de login de Meta):
+[docs/INSTAGRAM_SETUP.md](docs/INSTAGRAM_SETUP.md).**
+
+Resumen: cuenta de Instagram **profesional** (Creator/Business) + app en
+[developers.facebook.com](https://developers.facebook.com) con el producto
+Instagram. Se soportan los dos flujos oficiales — el nuevo "Instagram login"
+(token `IGAA…`, sin página de Facebook) y el clásico via Facebook (token
+`EAA…`); el host de la Graph API se detecta automáticamente.
 
 Secrets del repositorio (Settings → Secrets and variables → Actions):
 
