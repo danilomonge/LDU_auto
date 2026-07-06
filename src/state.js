@@ -86,6 +86,7 @@ export function planPosts(matches, state, now = new Date()) {
     };
   }
 
-  state.lastRun = now.toISOString();
+  // Note: nothing volatile (e.g. timestamps) is stored, so a no-op run leaves
+  // the state file byte-identical and the workflow commits nothing.
   return { posts, state };
 }
