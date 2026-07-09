@@ -97,12 +97,19 @@
     "401865561": {
       "baselined": true,
       "date": "2026-05-26T22:00Z"
+    },
+    "tsdb-2468937": {
+      "posted": true,
+      "date": "2026-07-09T01:00:00Z",
+      "score": "1-1",
+      "name": "Independiente Juniors vs LDU"
     }
   },
-  "announcedFixture": {
-    "id": "401859608",
-    "fingerprint": "pre|||2026-07-12T17:00Z",
-    "name": "LDU vs Libertad",
-    "date": "2026-07-12T17:00Z"
+  "fixtures": {
+    "401859608": {
+      "fingerprint": "pre|||2026-07-12T17:00Z",
+      "name": "LDU vs Libertad",
+      "date": "2026-07-12T17:00Z"
+    }
   }
 }
