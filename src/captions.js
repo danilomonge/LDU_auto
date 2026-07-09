@@ -45,199 +45,139 @@ function pick(list, seed) {
   return list[h % list.length];
 }
 
-// The banks are original lines built from real LDU hinchada motifs (Ponciano,
-// Casa Blanca, viejo amigo, guambra, Centrales, Rey de Copas), without copying
-// full chants. The generated closer is deterministic but can vary across tens
-// of thousands of natural two/three-line combinations.
-const CORE_HEART_LINES = [
-  'Como te quiero, mi viejo amigo.',
-  'Otra vez contigo, Liga querida.',
-  'Mi viejo amigo, hoy volvemos a estar.',
-  'Liga de mi vida, una vez más.',
-  'Esto de Liga no se explica, se siente.',
-  'Desde guambra con la blanca en el pecho.',
-  'Desde que me acuerdo, siempre Liga.',
-  'Hay amores que no se discuten.',
-  'Mi corazón sabe de qué lado está.',
-  'La U no se suelta nunca.',
-  'Qué lindo es volver a pensarte todo el día.',
-  'Albo querido, acá estamos otra vez.',
-  'Una vida entera aprendiendo a quererte.',
-  'La camiseta blanca no se mira de lejos.',
-  'Con Liga se sufre, se canta y se vuelve.',
-  'No es costumbre: es pertenencia.',
-  'No es solo fútbol cuando juega Liga.',
-  'Hay cosas que se heredan sin explicación.',
-  'Liga es ese amor que vuelve cada semana.',
-  'A veces alegría, a veces bronca, siempre Liga.',
-  'Lo nuestro con Liga viene de lejos.',
-  'Donde esté Liga, algo se mueve adentro.',
-  'Esta locura alba no pide permiso.',
-  'La semana cambia cuando juega la U.',
-  'En esta casa se habla en blanco, rojo y azul.',
-];
-
-const PLACE_AND_HISTORY_LINES = [
-  'Ponciano no es cualquier cancha.',
-  'La Casa Blanca tiene memoria.',
-  'Quito sabe cuando juega Liga.',
-  'El Rey de Copas no vive de apodos; los defiende.',
-  'Esta camiseta se hizo grande con noches así.',
-  'En Ponciano se aprende a querer distinto.',
-  'La U tiene historia y la historia exige.',
-  'La blanca pesa porque atrás hay vida.',
-  'La casona guarda alegrías que no se olvidan.',
-  'Ser albo también es saber esperar.',
-  'Centrales de nombre, albos de corazón.',
-  'Liga no necesita gritar para pesar.',
-  'El escudo ya habla antes del pitazo.',
-  'Cada partido trae su propio nudo en la garganta.',
-  'La historia no entra a la cancha, pero empuja.',
+// The banks are short, original lines in the voice of the LDU hinchada
+// (viejo amigo, Rey de Copas, Casa Blanca, Ponciano, Centrales, guambra),
+// without copying full chants. Each closer is exactly two lines: a short
+// status line plus a classic grito, so it reads like a real fan post
+// instead of stacked poetry.
+const GRITOS = [
+  '¡Vamos, Liga!',
+  '¡Liga, Liga, Liga!',
+  '¡Somos la U!',
+  '¡Arriba el Rey de Copas!',
+  '¡Vamos, viejo amigo!',
+  '¡Arriba los albos!',
+  'Liga es Liga.',
+  'Hincha de Liga desde guambra.',
+  'Orgullosamente albo.',
+  '¡Dale, Liga!',
+  'Siempre Liga.',
+  'Todos somos Liga.',
 ];
 
 const FIXTURE_LINES = [
-  'Que ruede la pelota y que hable la camiseta.',
-  'Hoy toca jugar con memoria y presente.',
-  'Ponciano sabe lo que pesa esta camiseta.',
-  'Que la Casa Blanca empuje desde el primer minuto.',
-  'Partido para entrar serios y salir más albos.',
-  'Hoy no alcanza con estar: toca competir.',
-  'Que se sienta Quito cuando salga Liga.',
-  'Con fe, con cabeza y con el pecho albo.',
-  'A jugar como pide la historia.',
-  'La previa ya se vive con nervios de Liga.',
-  'Que sea una de esas tardes que se quedan.',
-  'La cancha espera, la hinchada también.',
-  'Hoy hay que responderle al escudo.',
-  'Que el rival sepa dónde está parado.',
-  'La pelota dirá, pero el aliento ya está.',
-  'A Ponciano se va con fe y exigencia.',
-  'No importa el torneo: importa la camiseta.',
-  'Que sea con carácter, como manda Liga.',
-  'Hoy se vuelve a prender el corazón albo.',
-  'Vamos por otra alegría, sin vender humo.',
-  'Partido a partido, como se vive esto.',
-  'Que Liga haga lo suyo y la gente lo de siempre.',
-  'Desde temprano ya se siente distinto.',
-  'Hoy la blanca tiene que hablar fuerte.',
-  'Que el equipo entre sabiendo lo que representa.',
+  'Hoy juega Liga.',
+  'Día de partido.',
+  'Hoy toca alentar a la U.',
+  'La previa ya se siente en Quito.',
+  'La blanca sale a la cancha.',
+  'Que hable la cancha.',
+  'Con la U a todas partes.',
+  'Los Centrales ya viven la previa.',
+  'Nos vemos en la cancha.',
+  'Un partido más para alentar a Liga.',
+  'Se viene un lindo partido.',
+  'Todos con la U.',
+  'Que ruede la pelota.',
+  'La hinchada ya está lista.',
+  'Quito amanece pensando en Liga.',
+  'Salimos a ganar, como siempre.',
+  'El Rey de Copas sale a la cancha.',
+  'Vamos con fe.',
+  'Partido a partido.',
+  'A dejar todo por la camiseta.',
 ];
 
 const WIN_LINES = [
-  'Así se vuelve a casa con el pecho lleno.',
-  'Triunfo de esos que se gritan distinto.',
-  'Tres puntos y una sonrisa bien alba.',
-  'Ganó Liga y la semana respira mejor.',
-  'Cuando gana la U, todo pesa menos.',
-  'Esto también es Liga: sufrir, empujar, ganar.',
-  'La alegría tiene nombre y juega de blanco.',
-  'Se disfruta, porque también costaba.',
-  'Victoria para abrazar al viejo amigo.',
-  'Qué lindo dormir con Liga ganando.',
-  'La Casa Blanca sabe celebrar estas noches.',
-  'Tres puntos para seguir creyendo con calma.',
-  'Orgullo albo, sin perder la cabeza.',
-  'Ganó Liga y Ponciano lo sabe.',
-  'Hoy la camiseta respondió.',
-  'Una alegría más para esta locura.',
-  'Se ganó como se tenía que ganar.',
-  'Esto se festeja con memoria y humildad.',
-  'Partido trabajado, alegría completa.',
-  'La U hizo lo suyo y el corazón también.',
-  'Ganar con Liga nunca se vuelve rutina.',
-  'Qué lindo verte ganar, viejo amigo.',
-  'Triunfo para los que siempre están.',
-  'Otra página chica, otro orgullo grande.',
-  'Se festeja porque Liga importa.',
+  'Tres puntos más para la U.',
+  'Qué lindo es ganar.',
+  'Así da gusto.',
+  'Triunfo albo.',
+  'Esto es Liga.',
+  'Se sufrió, pero se ganó.',
+  'A seguir por este camino.',
+  'El Rey de Copas hizo lo suyo.',
+  'Victoria alba.',
+  'Qué bien se duerme cuando gana Liga.',
+  'Tres puntos que valen oro.',
+  'La camiseta respondió.',
+  'Fiesta en Ponciano.',
+  'Sonríe la Casa Blanca.',
+  'Otro triunfo para el viejo amigo.',
+  'Que siga la racha.',
+  'Bien, Liga, bien.',
+  'Se festeja hoy, mañana a pensar en lo que viene.',
 ];
 
 const DRAW_LINES = [
-  'No alcanza, pero acá nadie se baja.',
-  'Punto con bronca, camiseta intacta.',
-  'Faltaron detalles; sobró aliento.',
-  'Se suma, se corrige y se vuelve.',
-  'Empatar con Liga deja ganas de más.',
-  'La exigencia también es parte del amor.',
-  'No era lo que queríamos, pero seguimos.',
-  'Hay que mejorar, porque Liga obliga.',
-  'La hinchada acompaña, pero también exige.',
-  'Punto que sabe a tarea pendiente.',
-  'Queda bronca; queda Liga.',
-  'No se festeja, se analiza y se sigue.',
-  'El viejo amigo merecía más hoy.',
-  'A levantar la cabeza sin conformarse.',
-  'La camiseta pide otra respuesta.',
-  'Esto no termina acá; Liga nunca se mira de lejos.',
-  'Hoy faltó cerrar lo que se peleó.',
-  'La fe sigue, la vara también.',
-  'Se vuelve con el alma medio cruzada.',
-  'Hay empates que dejan trabajo para la semana.',
-  'A esta historia se le pide más.',
-  'No nos vamos felices, nos vamos presentes.',
-  'El camino sigue y la exigencia también.',
-  'Cuando no alcanza, toca hablar en la cancha.',
-  'Liga merece más, y por eso duele.',
+  'Sabor a poco.',
+  'Un punto y a seguir.',
+  'No era el resultado que queríamos.',
+  'Da iras, pero seguimos.',
+  'La U merecía más.',
+  'Empate que no conforma.',
+  'Punto que suma, pero no alcanza.',
+  'Seguimos en la pelea.',
+  'Ni modo, a seguir alentando.',
+  'La próxima se gana.',
+  'Faltó el gol, no el aliento.',
+  'Hay que mejorar, así de simple.',
+  'Nadie dijo que era fácil.',
+  'Se sigue sumando.',
+  'Cabeza arriba y a lo que viene.',
+  'Igual estamos con la U.',
+  'A pensar en el próximo partido.',
+  'A corregir y pensar en lo que viene.',
 ];
 
 const LOSS_LINES = [
-  'Duele porque Liga importa.',
-  'Hoy pesa, mañana se vuelve.',
-  'Se acompaña, pero se exige.',
-  'La camiseta no permite acostumbrarse a perder.',
-  'Bronca alba, amor intacto.',
-  'A Liga no se la deja en una mala noche.',
-  'Perder con esta camiseta siempre tiene que doler.',
-  'Toca mirarse de frente y responder.',
-  'No hay frase linda para esto: hay que mejorar.',
-  'La hinchada está, la respuesta tiene que venir.',
-  'Viejo amigo, hoy duele; igual acá estamos.',
-  'La historia pide reacción.',
-  'Esto se levanta jugando, no hablando.',
-  'En las malas también se demuestra quién está.',
-  'No se abandona, pero tampoco se tapa.',
-  'A corregir rápido, porque Liga exige.',
-  'La bronca también es amor por la camiseta.',
-  'Que este golpe sirva para despertar.',
-  'Hoy nos vamos golpeados, no ausentes.',
-  'La U merece una respuesta a la altura.',
-  'Cuando Liga cae, el pecho queda pesado.',
-  'No se negocia el apoyo; tampoco la exigencia.',
-  'Otra vez tocará volver y empujar.',
-  'Hay derrotas que solo se curan respondiendo.',
-  'Que duela, y que se note en el próximo.',
+  'Duele, sí. Pero acá estamos.',
+  'Ahora más que nunca.',
+  'En las buenas y en las malas.',
+  'Da iras perder así.',
+  'A levantarse rápido.',
+  'No se abandona.',
+  'La U se levanta, siempre lo ha hecho.',
+  'Mal partido, mismo sentimiento.',
+  'A dar vuelta la página.',
+  'El hincha siempre está.',
+  'Toca responder en la cancha.',
+  'De Liga no se baja nadie.',
+  'Tocó perder, toca volver.',
+  'Con más razón, a alentar.',
+  'Esto se arregla ganando.',
+  'La camiseta exige reaccionar.',
+  'Tranquilos, esto es largo.',
+  'Seguimos con la U, como siempre.',
+];
+
+const STANDINGS_LINES = [
+  'Partido a partido.',
+  'La tabla habla, la cancha decide.',
+  'A seguir sumando.',
+  'Paso a paso con la U.',
+  'El objetivo está claro.',
+  'Nada está dicho todavía.',
+  'Se pelea hasta el final.',
+  'La U sigue en carrera.',
+  'Cada punto cuesta.',
+  'Vamos por más.',
 ];
 
 function buildCloserBank(statusLines) {
   const identity = /\b(Liga|alb[ao]s?|Casa Blanca|Ponciano|camiseta|viejo amigo|La U|Centrales|Rey de Copas|blanca)\b/i;
-  return CORE_HEART_LINES.flatMap((heart) =>
-    statusLines.flatMap((status) =>
-      ['', ...PLACE_AND_HISTORY_LINES].map((place) =>
-        [heart, status, place].filter(Boolean).join('\n')
-      )
-    )
+  return statusLines.flatMap((status) =>
+    GRITOS.map((grito) => `${status}\n${grito}`)
   ).filter((line) => identity.test(line));
 }
 
-const STANDINGS_LINES = [
-  'La tabla se mira con calma y exigencia.',
-  'El campeonato se define partido a partido.',
-  'La tabla habla, pero la cancha decide.',
-  'Cada punto de esta tabla costó lo suyo.',
-  'Se sigue el campeonato con la vara alta.',
-  'Arriba se llega jugando, no mirando.',
-  'La pelea por el título no da respiro.',
-  'Esta tabla todavía tiene mucho por escribir.',
-  'Los números acompañan, el aliento empuja.',
-  'Fecha a fecha, la tabla toma forma.',
-];
-
-const FIXTURE_CLOSERS = buildCloserBank(FIXTURE_LINES); // 10,000
+const FIXTURE_CLOSERS = buildCloserBank(FIXTURE_LINES); // 240
 const RESULT_CLOSERS = {
-  win: buildCloserBank(WIN_LINES), // 10,000
-  draw: buildCloserBank(DRAW_LINES), // 10,000
-  loss: buildCloserBank(LOSS_LINES), // 10,000
+  win: buildCloserBank(WIN_LINES), // 216
+  draw: buildCloserBank(DRAW_LINES), // 216
+  loss: buildCloserBank(LOSS_LINES), // 216
 };
-const STANDINGS_CLOSERS = buildCloserBank(STANDINGS_LINES); // 3,650
+const STANDINGS_CLOSERS = buildCloserBank(STANDINGS_LINES); // 120
 
 export const captionClosersForTest = {
   fixture: FIXTURE_CLOSERS,

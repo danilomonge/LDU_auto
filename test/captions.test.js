@@ -85,14 +85,16 @@ test('caption banks have broad variety without burned-out filler or toxic rivalr
   ];
 
   for (const [name, lines] of Object.entries(captionClosersForTest)) {
-    const minUnique = name === 'standings' ? 3000 : 5000;
+    const minUnique = name === 'standings' ? 100 : 200;
     assert.ok(new Set(lines).size >= minUnique, `${name} should have at least ${minUnique} unique closers`);
     for (const line of lines) {
-      assert.ok(line.length <= 220, `${name} closer is too long: ${line}`);
+      assert.ok(line.length <= 120, `${name} closer is too long: ${line}`);
       assert.doesNotMatch(line, genericConOpener);
       assert.match(line, /\b(Liga|alb[ao]s?|Casa Blanca|Ponciano|camiseta|viejo amigo|La U|Centrales|Rey de Copas|blanca)\b/i);
-      for (const part of line.split('\n')) {
-        assert.ok(part.length <= 80, `${name} closer line is too long: ${part}`);
+      const parts = line.split('\n');
+      assert.ok(parts.length <= 2, `${name} closer stacks too many lines: ${line}`);
+      for (const part of parts) {
+        assert.ok(part.length <= 60, `${name} closer line is too long: ${part}`);
       }
       for (const pattern of banned) assert.doesNotMatch(line, pattern);
     }
