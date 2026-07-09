@@ -70,6 +70,11 @@ jobs:
           [ -n "$UT" ] && echo "::add-mask::$UT"
 
           if [ -n "$UT" ]; then
+            # Inspect the seed token with the app token (app_id|app_secret) —
+            # works even when no user/page token is alive, and prints whether
+            # the seed is valid, when it expires and which scopes it carries.
+            DBG=$(curl -s "$GRAPH/debug_token?input_token=${UT}&access_token=${FB_APP_ID}|${FB_APP_SECRET}")
+            echo "Seed token: $(printf %s "$DBG" | jq -c '.data // .error | {is_valid, type, expires_at, scopes, message: .message}' 2>/dev/null || echo unparseable)"
             # Primary path: refresh the user token (this RESETS the 60 days)…
             RESP=$(curl -s "$GRAPH/oauth/access_token?grant_type=fb_exchange_token&client_id=${FB_APP_ID}&client_secret=${FB_APP_SECRET}&fb_exchange_token=${UT}")
             NU=$(printf %s "$RESP" | jq -r '.access_token // empty')
