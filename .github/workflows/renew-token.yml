@@ -17,9 +17,13 @@ name: Renew Meta access token
 #   IG_ACCESS_TOKEN  legacy seed/fallback for the page token
 #   FACEBOOK_USER_ID page id, used to pick and verify the page token
 
+# 2026-07-09: schedule removed — publishing now runs on a never-expiring
+# USER token in the IG_ACCESS_TOKEN secret (the page token is derived on the
+# fly by src/publish.js), so there is nothing to renew and the cron only
+# produced failure emails (fb_exchange kept returning OAuthException code 2).
+# The workflow stays manually runnable: reseed FB_USER_TOKEN and dispatch it
+# if an expiring token ever needs the renewal cycle again.
 on:
-  schedule:
-    - cron: '0 12 1,15 * *' # twice a month — 4 chances per 60-day token life
   workflow_dispatch: {}
 
 concurrency:
