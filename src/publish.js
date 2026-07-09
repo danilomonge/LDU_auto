@@ -113,6 +113,30 @@ export function configuredAccounts() {
   return accounts;
 }
 
+// Page posts need a PAGE token, but the token chain often carries USER
+// tokens (posting to a page with one fails with "(#200) publish_actions").
+// Derive the page's own token via /me/accounts; a token that already IS a
+// page token can't list /me/accounts and falls through unchanged.
+const pageTokenCache = new Map();
+export async function resolvePageToken(pageId, token) {
+  const key = `${pageId}:${token}`;
+  if (!pageTokenCache.has(key)) {
+    let resolved = token;
+    try {
+      const res = await graphGet('https://graph.facebook.com/v23.0/me/accounts', {
+        fields: 'id,access_token',
+        access_token: token,
+      });
+      const page = (res.data || []).find((p) => String(p.id) === String(pageId));
+      if (page?.access_token) resolved = page.access_token;
+    } catch {
+      // Not a user token (or no page access) — post with the token as-is.
+    }
+    pageTokenCache.set(key, resolved);
+  }
+  return pageTokenCache.get(key);
+}
+
 async function publishTo(account, token, imageUrl, caption) {
   if (account.type === 'page') {
     // Facebook Page feed: single-call photo post. Needs a Page token with
@@ -120,7 +144,7 @@ async function publishTo(account, token, imageUrl, caption) {
     return graphPost(`https://graph.facebook.com/v23.0/${account.userId}/photos`, {
       url: imageUrl,
       message: caption,
-      access_token: token,
+      access_token: await resolvePageToken(account.userId, token),
     });
   }
   const GRAPH = graphBase(token);
@@ -229,12 +253,13 @@ const TEST_IMAGE = 'https://a.espncdn.com/i/teamlogos/soccer/500/4816.png';
 async function deepWriteCheck(account, token) {
   try {
     if (account.type === 'page') {
+      const pageToken = await resolvePageToken(account.userId, token);
       const photo = await graphPost(`https://graph.facebook.com/v23.0/${account.userId}/photos`, {
         url: TEST_IMAGE,
         published: 'false',
-        access_token: token,
+        access_token: pageToken,
       });
-      await fetch(`https://graph.facebook.com/v23.0/${photo.id}?access_token=${encodeURIComponent(token)}`, { method: 'DELETE' });
+      await fetch(`https://graph.facebook.com/v23.0/${photo.id}?access_token=${encodeURIComponent(pageToken)}`, { method: 'DELETE' });
       console.log(`WRITE CHECK OK — unpublished page photo created (${photo.id}) and deleted.`);
     } else {
       const GRAPH = graphBase(token);

@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { configuredAccounts, isAuthError } from '../src/publish.js';
+import { configuredAccounts, isAuthError, resolvePageToken } from '../src/publish.js';
+
+function withFetch(impl, fn) {
+  const saved = globalThis.fetch;
+  globalThis.fetch = impl;
+  return fn().finally(() => {
+    globalThis.fetch = saved;
+  });
+}
+
+const jsonResponse = (body, ok = true) =>
+  Promise.resolve({ ok, json: () => Promise.resolve(body) });
 
 function withEnv(vars, fn) {
   const saved = {};
@@ -57,6 +68,39 @@ test('a dedicated page token leads the facebook chain', () => {
     const fb = configuredAccounts().find((a) => a.key === 'facebook');
     assert.deepEqual(fb.tokens, ['EAApage', 'EAAprimary', 'EAAsecret']);
   });
+});
+
+test('a user token is swapped for the page token before posting to the page', async () => {
+  await withFetch(
+    () => jsonResponse({ data: [{ id: '111', access_token: 'EAApageA' }, { id: '222', access_token: 'EAApageB' }] }),
+    async () => {
+      assert.equal(await resolvePageToken('222', 'EAAuser-swap'), 'EAApageB');
+    }
+  );
+});
+
+test('a token that cannot list pages is used as-is (already a page token)', async () => {
+  await withFetch(
+    () => jsonResponse({ error: { message: 'impersonation…', type: 'OAuthException', code: 190 } }, false),
+    async () => {
+      assert.equal(await resolvePageToken('222', 'EAApage-asis'), 'EAApage-asis');
+    }
+  );
+});
+
+test('page-token resolution is cached per token', async () => {
+  let calls = 0;
+  await withFetch(
+    () => {
+      calls += 1;
+      return jsonResponse({ data: [{ id: '333', access_token: 'EAApageC' }] });
+    },
+    async () => {
+      await resolvePageToken('333', 'EAAuser-cache');
+      await resolvePageToken('333', 'EAAuser-cache');
+      assert.equal(calls, 1);
+    }
+  );
 });
 
 test('isAuthError recognizes OAuth/token failures but not transient ones', () => {
