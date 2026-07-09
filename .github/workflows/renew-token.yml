@@ -71,15 +71,21 @@ jobs:
 
           if [ -n "$UT" ]; then
             # Primary path: refresh the user token (this RESETS the 60 days)…
-            NU=$(curl -s "$GRAPH/oauth/access_token?grant_type=fb_exchange_token&client_id=${FB_APP_ID}&client_secret=${FB_APP_SECRET}&fb_exchange_token=${UT}" | jq -r '.access_token // empty')
+            RESP=$(curl -s "$GRAPH/oauth/access_token?grant_type=fb_exchange_token&client_id=${FB_APP_ID}&client_secret=${FB_APP_SECRET}&fb_exchange_token=${UT}")
+            NU=$(printf %s "$RESP" | jq -r '.access_token // empty')
             if [ -z "$NU" ]; then
+              # Surface Meta's error message (never contains the token) so the
+              # failing piece (app id vs secret vs token) is identifiable.
+              echo "Meta says: $(printf %s "$RESP" | jq -c '.error | {message, type, code}' 2>/dev/null || echo unparseable)"
               echo "::error::User-token refresh failed (expired or revoked). Generate a fresh token in the Graph API Explorer, update the FB_USER_TOKEN secret, delete data/usertoken.enc and re-run."
               exit 1
             fi
             echo "::add-mask::$NU"
             # …and derive a fresh page token from it.
-            NEW=$(curl -s "$GRAPH/me/accounts?fields=id,access_token&access_token=${NU}" | jq -r --arg id "${FACEBOOK_USER_ID:-}" '.data[] | select(.id==$id) | .access_token // empty')
+            ACCTS=$(curl -s "$GRAPH/me/accounts?fields=id,access_token&access_token=${NU}")
+            NEW=$(printf %s "$ACCTS" | jq -r --arg id "${FACEBOOK_USER_ID:-}" '.data[]? | select(.id==$id) | .access_token // empty')
             if [ -z "$NEW" ]; then
+              echo "Meta says: $(printf %s "$ACCTS" | jq -c 'if .error then .error | {message, type, code} else {pages_visible: [.data[]?.id]} end' 2>/dev/null || echo unparseable)"
               echo "::error::Could not derive a page token for FACEBOOK_USER_ID from the refreshed user token."
               exit 1
             fi
