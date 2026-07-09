@@ -59,23 +59,6 @@ export function planPosts(matches, state, now = new Date()) {
   }
   const posts = [];
 
-  const nextFixture = matches
-    .filter((m) => m.state === 'pre' && new Date(m.date) > now)
-    .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
-
-  if (nextFixture) {
-    const fp = fingerprint(nextFixture);
-    const prev = state.fixtures[nextFixture.id];
-    if (!prev || prev.fingerprint !== fp) {
-      posts.push({ match: nextFixture, type: 'fixture' });
-      state.fixtures[nextFixture.id] = {
-        fingerprint: fp,
-        name: `${nextFixture.home.shortName} vs ${nextFixture.away.shortName}`,
-        date: nextFixture.date,
-      };
-    }
-  }
-
   // A past kickoff can never be "next" again (a real reschedule changes the
   // fingerprint anyway), so long-past entries only bloat the state file.
   const MAX_FIXTURE_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -105,6 +88,25 @@ export function planPosts(matches, state, now = new Date()) {
       score: `${m.home.score}-${m.away.score}`,
       name: `${m.home.shortName} vs ${m.away.shortName}`,
     };
+  }
+
+  // The fixture announcement is queued AFTER any results so the feed reads
+  // chronologically: "final del partido" first, "próximo partido" on top.
+  const nextFixture = matches
+    .filter((m) => m.state === 'pre' && new Date(m.date) > now)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+
+  if (nextFixture) {
+    const fp = fingerprint(nextFixture);
+    const prev = state.fixtures[nextFixture.id];
+    if (!prev || prev.fingerprint !== fp) {
+      posts.push({ match: nextFixture, type: 'fixture' });
+      state.fixtures[nextFixture.id] = {
+        fingerprint: fp,
+        name: `${nextFixture.home.shortName} vs ${nextFixture.away.shortName}`,
+        date: nextFixture.date,
+      };
+    }
   }
 
   // Note: nothing volatile (e.g. timestamps) is stored, so a no-op run leaves

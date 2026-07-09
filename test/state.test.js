@@ -147,6 +147,55 @@ test('long-past announced fixtures are pruned from state', () => {
   assert.ok(state.fixtures.liga);
 });
 
+// Full interleaving of both sources across a week: every REAL next match is
+// announced exactly once and in kickoff order; nothing re-posts when the
+// "next" pointer swings between ESPN (league) and TheSportsDB (cup) matches.
+test('lifecycle: league + cup interleave without duplicate or missing posts', () => {
+  const liga12 = match('liga12', '2026-07-12T17:00Z');
+  const liga15 = match('liga15', '2026-07-15T22:00Z');
+  const seq = [];
+  const run = (matches, state, at) => {
+    const r = planPosts(matches, state, new Date(at));
+    seq.push(...r.posts.map((p) => `${p.type}:${p.match.id}`));
+    return r.state;
+  };
+
+  // Mon: only league fixtures exist → Sunday's match is announced.
+  let st = run([liga12, liga15], null, '2026-07-06T12:00Z');
+  // Tue: TheSportsDB publishes a cup match for Friday → new true next.
+  const copa = { ...match('copa', '2026-07-10T01:00Z'), competitionType: 'copaecuador' };
+  st = run([copa, liga12, liga15], st, '2026-07-07T12:00Z');
+  // Re-run with identical data → must be silent.
+  st = run([copa, liga12, liga15], st, '2026-07-08T12:00Z');
+  // Fri during the cup match (live): Sunday is "next" again → still silent.
+  const copaLive = { ...copa, state: 'in' };
+  st = run([copaLive, liga12, liga15], st, '2026-07-10T01:30Z');
+  // Fri late: cup finished → one result post, no fixture repost.
+  const copaDone = {
+    ...copa, state: 'post', completed: true,
+    home: { ...copa.home, score: '1', winner: false },
+    away: { ...copa.away, score: '1', winner: true },
+  };
+  st = run([copaDone, liga12, liga15], st, '2026-07-10T03:30Z');
+  // Sun: league match finished → result + Wednesday announced as new next.
+  const liga12Done = {
+    ...liga12, state: 'post', completed: true,
+    home: { ...liga12.home, score: '2', winner: true },
+    away: { ...liga12.away, score: '0', winner: false },
+  };
+  st = run([copaDone, liga12Done, liga15], st, '2026-07-12T19:10Z');
+  // Re-run → silent.
+  st = run([copaDone, liga12Done, liga15], st, '2026-07-12T20:10Z');
+
+  assert.deepEqual(seq, [
+    'fixture:liga12',
+    'fixture:copa',
+    'result:copa',
+    'result:liga12',
+    'fixture:liga15',
+  ]);
+});
+
 test('fingerprint changes with score, state and date', () => {
   const a = fingerprint(match('x', '2026-07-10T00:00Z'));
   const b = fingerprint(match('x', '2026-07-10T00:00Z', { state: 'post', completed: true, hs: '1', as: '0' }));
