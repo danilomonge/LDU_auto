@@ -58,7 +58,9 @@ jobs:
 
       - name: Resolve access token
         # Prefer the auto-renewed encrypted token (data/token.enc) over the
-        # static IG_ACCESS_TOKEN secret.
+        # static IG_ACCESS_TOKEN secret — but keep the secret as a FALLBACK
+        # in the publish token chain, so a botched renewal alone can't take
+        # publishing down while the secret is still valid.
         env:
           TOKEN_KEY: ${{ secrets.TOKEN_KEY }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -66,7 +68,10 @@ jobs:
           T="$IG_ACCESS_TOKEN"
           if [ -n "$TOKEN_KEY" ] && [ -f data/token.enc ]; then
             T=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass env:TOKEN_KEY -base64 -A -in data/token.enc)
-            echo "Using auto-renewed token from data/token.enc"
+            echo "Using auto-renewed token from data/token.enc (secret kept as fallback)"
+            if [ -n "$IG_ACCESS_TOKEN" ] && [ "$IG_ACCESS_TOKEN" != "$T" ]; then
+              echo "IG_ACCESS_TOKEN_FALLBACK=$IG_ACCESS_TOKEN" >> "$GITHUB_ENV"
+            fi
           else
             echo "Using IG_ACCESS_TOKEN secret directly"
           fi

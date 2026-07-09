@@ -24,7 +24,10 @@ jobs:
           T="$IG_ACCESS_TOKEN"
           if [ -n "$TOKEN_KEY" ] && [ -f data/token.enc ]; then
             T=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass env:TOKEN_KEY -base64 -A -in data/token.enc)
-            echo "Using auto-renewed token from data/token.enc"
+            echo "Using auto-renewed token from data/token.enc (secret kept as fallback)"
+            if [ -n "$IG_ACCESS_TOKEN" ] && [ "$IG_ACCESS_TOKEN" != "$T" ]; then
+              echo "IG_ACCESS_TOKEN_FALLBACK=$IG_ACCESS_TOKEN" >> "$GITHUB_ENV"
+            fi
           else
             echo "Using IG_ACCESS_TOKEN secret directly"
           fi

@@ -35,6 +35,18 @@ function imageBaseUrl() {
   return null;
 }
 
+function graphError(json) {
+  const err = new Error(`Graph API error: ${JSON.stringify(json.error || json)}`);
+  err.graphCode = json.error?.code;
+  return err;
+}
+
+// Token/permission failures (OAuth 190 & friends) — a different token may
+// still work; transient Graph hiccups would fail on any token.
+export function isAuthError(err) {
+  return err?.graphCode === 190 || /OAuthException/.test(err?.message || '');
+}
+
 async function graphPost(url, params) {
   const res = await fetch(url, {
     method: 'POST',
@@ -42,9 +54,7 @@ async function graphPost(url, params) {
     body: new URLSearchParams(params),
   });
   const json = await res.json();
-  if (!res.ok || json.error) {
-    throw new Error(`Graph API error: ${JSON.stringify(json.error || json)}`);
-  }
+  if (!res.ok || json.error) throw graphError(json);
   return json;
 }
 
@@ -52,9 +62,7 @@ async function graphGet(url, params) {
   const qs = new URLSearchParams(params);
   const res = await fetch(`${url}?${qs}`);
   const json = await res.json();
-  if (!res.ok || json.error) {
-    throw new Error(`Graph API error: ${JSON.stringify(json.error || json)}`);
-  }
+  if (!res.ok || json.error) throw graphError(json);
   return json;
 }
 
@@ -83,43 +91,64 @@ const cleanEnv = (name) =>
 // Two destinations:
 //  - "instagram": IG professional account (container → publish flow)
 //  - "facebook":  Facebook PAGE feed (simple /photos post). Its token falls
-//    back to IG_ACCESS_TOKEN, which works when that is a Page token.
+//    back to the Instagram chain, which works when that is a Page token.
+// Each account carries a token CHAIN, tried in order when the previous token
+// is rejected with an auth error: the workflow puts the auto-renewed token
+// (data/token.enc) first and the IG_ACCESS_TOKEN secret second, so a botched
+// renewal can't take publishing down while the secret is still valid.
 export function configuredAccounts() {
   const accounts = [];
+  const igTokens = [...new Set(
+    [cleanEnv('IG_ACCESS_TOKEN'), cleanEnv('IG_ACCESS_TOKEN_FALLBACK')].filter(Boolean)
+  )];
   const igId = cleanEnv('IG_USER_ID');
-  const igToken = cleanEnv('IG_ACCESS_TOKEN');
-  if (igId && igToken) {
-    accounts.push({ key: 'instagram', type: 'ig', userId: igId, token: igToken });
+  if (igId && igTokens.length) {
+    accounts.push({ key: 'instagram', type: 'ig', userId: igId, tokens: igTokens });
   }
   const fbId = cleanEnv('FACEBOOK_USER_ID');
-  const fbToken = cleanEnv('FACEBOOK_ACCESS_TOKEN') || igToken;
-  if (fbId && fbToken) {
-    accounts.push({ key: 'facebook', type: 'page', userId: fbId, token: fbToken });
+  const fbTokens = [...new Set([cleanEnv('FACEBOOK_ACCESS_TOKEN'), ...igTokens].filter(Boolean))];
+  if (fbId && fbTokens.length) {
+    accounts.push({ key: 'facebook', type: 'page', userId: fbId, tokens: fbTokens });
   }
   return accounts;
 }
 
-async function publishTo(account, imageUrl, caption) {
+async function publishTo(account, token, imageUrl, caption) {
   if (account.type === 'page') {
     // Facebook Page feed: single-call photo post. Needs a Page token with
     // pages_manage_posts.
     return graphPost(`https://graph.facebook.com/v23.0/${account.userId}/photos`, {
       url: imageUrl,
       message: caption,
-      access_token: account.token,
+      access_token: token,
     });
   }
-  const GRAPH = graphBase(account.token);
+  const GRAPH = graphBase(token);
   const container = await graphPost(`${GRAPH}/${account.userId}/media`, {
     image_url: imageUrl,
     caption,
-    access_token: account.token,
+    access_token: token,
   });
-  await waitForContainer(GRAPH, container.id, account.token);
+  await waitForContainer(GRAPH, container.id, token);
   return graphPost(`${GRAPH}/${account.userId}/media_publish`, {
     creation_id: container.id,
-    access_token: account.token,
+    access_token: token,
   });
+}
+
+// Walk the account's token chain: auth rejections move on to the next token,
+// anything else (bad image URL, transient API failure) aborts immediately.
+async function publishWithFallback(account, imageUrl, caption) {
+  for (const [i, token] of account.tokens.entries()) {
+    try {
+      const pub = await publishTo(account, token, imageUrl, caption);
+      if (i > 0) console.log(`  (token #${i + 1} of the chain succeeded)`);
+      return pub;
+    } catch (err) {
+      if (!isAuthError(err) || i === account.tokens.length - 1) throw err;
+      console.log(`  token #${i + 1} rejected (${err.message}) — trying fallback token…`);
+    }
+  }
 }
 
 export async function publishPending() {
@@ -154,7 +183,7 @@ export async function publishPending() {
       if (item.publishedTo.includes(account.key)) continue;
       try {
         console.log(`Publishing ${item.file} → [${account.key}] …`);
-        const pub = await publishTo(account, imageUrl, item.caption);
+        const pub = await publishWithFallback(account, imageUrl, item.caption);
         console.log(`Published ${item.file} → [${account.key}] media id ${pub.id}`);
         item.publishedTo.push(account.key);
       } catch (err) {
@@ -182,9 +211,12 @@ export async function diagnose(deep = false) {
     return;
   }
   for (const account of accounts) {
-    console.log(`\n===== Account [${account.key}] (${account.type === 'page' ? 'Facebook Page feed' : 'Instagram'}) =====`);
-    await diagnoseAccount(account.userId, account.token, account.type);
-    if (deep) await deepWriteCheck(account);
+    for (const [i, token] of account.tokens.entries()) {
+      const label = i === 0 ? 'primary token' : `fallback token #${i}`;
+      console.log(`\n===== Account [${account.key}] (${account.type === 'page' ? 'Facebook Page feed' : 'Instagram'}) — ${label} =====`);
+      await diagnoseAccount(account.userId, token, account.type);
+      if (deep) await deepWriteCheck(account, token);
+    }
   }
 }
 
@@ -194,22 +226,22 @@ export async function diagnose(deep = false) {
 //  - Page: upload an UNpublished photo, then delete it immediately.
 const TEST_IMAGE = 'https://a.espncdn.com/i/teamlogos/soccer/500/4816.png';
 
-async function deepWriteCheck(account) {
+async function deepWriteCheck(account, token) {
   try {
     if (account.type === 'page') {
       const photo = await graphPost(`https://graph.facebook.com/v23.0/${account.userId}/photos`, {
         url: TEST_IMAGE,
         published: 'false',
-        access_token: account.token,
+        access_token: token,
       });
-      await fetch(`https://graph.facebook.com/v23.0/${photo.id}?access_token=${encodeURIComponent(account.token)}`, { method: 'DELETE' });
+      await fetch(`https://graph.facebook.com/v23.0/${photo.id}?access_token=${encodeURIComponent(token)}`, { method: 'DELETE' });
       console.log(`WRITE CHECK OK — unpublished page photo created (${photo.id}) and deleted.`);
     } else {
-      const GRAPH = graphBase(account.token);
+      const GRAPH = graphBase(token);
       const container = await graphPost(`${GRAPH}/${account.userId}/media`, {
         image_url: TEST_IMAGE,
         caption: 'diagnostic container — never published',
-        access_token: account.token,
+        access_token: token,
       });
       console.log(`WRITE CHECK OK — media container created (${container.id}), left unpublished (auto-expires in 24h).`);
     }
