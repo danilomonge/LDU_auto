@@ -3,7 +3,7 @@
 //   node src/index.js generate   fetch ESPN → detect changes → render posts
 //   node src/index.js publish    publish pending posts to Instagram
 //   node src/index.js cleanup    delete rendered posts older than 30 days
-//   node src/index.js samples    render demo posts for every competition type
+//   node src/index.js samples    render demo posts, edge cases and standings
 //
 // `generate` writes PNGs + captions to output/posts/ and queues them in
 // data/pending.json; `publish` (run after the workflow pushes, so the images
@@ -13,6 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fetchAllMatches, fetchLogoDataUri, fetchMatchExtras, fetchStandings } from './espn.js';
+import { fetchCupMatches } from './sportsdb.js';
 import { renderPostHtml } from './templates/post.js';
 import { renderStandingsHtml, selectRows } from './templates/standings.js';
 // Playwright is only needed for rendering; import lazily so publish/diag
@@ -76,9 +77,14 @@ async function renderStandingsPost(standings, outDir, now = new Date()) {
 }
 
 async function generate() {
-  console.log('Fetching LDU matches from ESPN…');
-  const matches = await fetchAllMatches();
-  console.log(`Found ${matches.length} matches across competitions:`);
+  console.log('Fetching LDU matches from ESPN + TheSportsDB…');
+  // ESPN covers LigaPro and CONMEBOL; TheSportsDB fills in Copa Ecuador and
+  // Supercopa, which ESPN has no data for.
+  const [espnMatches, cupMatches] = await Promise.all([fetchAllMatches(), fetchCupMatches()]);
+  const matches = [...espnMatches, ...cupMatches].sort(
+    (a, b) => new Date(a.date) - new Date(b.date)
+  );
+  console.log(`Found ${matches.length} matches across competitions (${cupMatches.length} from cups):`);
   for (const m of matches.slice(-6)) {
     console.log(`  ${m.date}  [${m.competitionType}] ${m.home.shortName} ${m.home.score ?? ''}-${m.away.score ?? ''} ${m.away.shortName} (${m.state})`);
   }

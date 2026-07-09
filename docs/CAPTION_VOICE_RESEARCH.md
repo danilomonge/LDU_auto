@@ -237,7 +237,8 @@ Total practical space: 37,500+ possible closer combinations before considering c
 ## Test Expectations
 
 - Generated caption closer must include an LDU-specific identity marker.
-- Generated banks should expose at least 5,000 unique closers per bucket for tests.
+- Fixture/result banks should expose at least 5,000 unique closers per bucket;
+  standings should expose at least 3,000.
 - No banned generic phrases.
 - No profanity or direct rival insults.
 - Generated line length should stay readable on Instagram.

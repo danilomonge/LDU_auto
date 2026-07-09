@@ -59,7 +59,7 @@ variables → Actions → New repository secret*:
 | `IG_USER_ID` | el ID numérico del paso 3 |
 | `IG_ACCESS_TOKEN` | el token `IGAA…` del paso 3 |
 
-Listo. En el siguiente run (máx. 30 min, o lánzalo manualmente en *Actions →
+Listo. En el siguiente run programado (máx. 1 hora, o lánzalo manualmente en *Actions →
 LDU Instagram posts → Run workflow*) se publicarán los posts en cola y todos
 los futuros.
 

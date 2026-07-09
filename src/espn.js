@@ -155,7 +155,7 @@ export function extractScorers(keyEvents, homeId, awayId) {
     const og = /own goal/i.test(typeText);
     const pen = /penalty/i.test(typeText);
     const list = sides[teamId];
-    const prev = list.find((s) => s.name === name && s.og === og);
+    const prev = list.find((s) => s.name === name && s.og === og && s.pen === pen);
     if (prev) prev.minutes.push(minute);
     else list.push({ name, minutes: [minute], og, pen });
   }
@@ -183,6 +183,9 @@ export function extractForm(lastFiveGames, homeId, awayId) {
 // Fetch scorers + form for one match. Best-effort: any failure returns null
 // and the poster renders exactly as it would without extras.
 export async function fetchMatchExtras(match) {
+  // Summary data only exists for ESPN events; cup matches come from
+  // TheSportsDB and have no extras.
+  if (match.source && match.source !== 'espn') return null;
   try {
     const data = await fetchJson(`${BASE}/${match.league}/summary?event=${match.id}`);
     return {

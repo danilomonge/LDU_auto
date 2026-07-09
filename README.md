@@ -15,7 +15,9 @@ competiciones).
    en todas las competiciones configuradas ([src/config.js](src/config.js)).
    Del resumen de cada partido salen además los goleadores con su minuto y la
    forma reciente (últimos 5) de ambos equipos; del endpoint de standings, la
-   tabla completa de la LigaPro.
+   tabla completa de la LigaPro. ESPN no cubre la Copa Ecuador ni la Supercopa:
+   esos partidos vienen de TheSportsDB ([src/sportsdb.js](src/sportsdb.js)),
+   también gratuita y sin clave, incluida la definición por penales.
 2. **Detección de cambios** — [data/state.json](data/state.json) guarda qué se
    anunció y qué resultados ya se publicaron. En cada ejecución solo se generan
    posts si hay estado nuevo: un nuevo "próximo partido", un cambio de
@@ -27,7 +29,7 @@ competiciones).
    1080×1350 con Playwright/Chromium. Tema visual por competición.
 4. **Publicación** — Instagram Graph API oficial. Las imágenes se commitean al
    repo y se publican usando su URL pública `raw.githubusercontent.com`.
-5. **Automatización** — GitHub Actions corre cada 30 minutos
+5. **Automatización** — GitHub Actions corre cada hora
    ([.github/workflows/ldu-posts.yml](.github/workflows/ldu-posts.yml)).
 
 ## Uso local
@@ -36,7 +38,7 @@ competiciones).
 npm install
 npx playwright install chromium
 
-npm run samples    # renderiza posts de demo (14: fixture+resultado × 7 competiciones)
+npm run samples    # renderiza demos de fixture, resultado, casos edge y tabla
 npm run generate   # pipeline real: ESPN → diff de estado → PNG + caption
 ```
 
@@ -74,6 +76,7 @@ y los deja en cola para publicarse cuando se configuren las credenciales.
 src/
   config.js               equipo, ligas ESPN, tipos de competición y hashtags
   espn.js                 cliente ESPN: partidos, goleadores, forma y standings
+  sportsdb.js             cliente TheSportsDB: Copa Ecuador y Supercopa (ESPN no las tiene)
   state.js                estado persistente y planificación de posts
   templates/post.js       plantilla HTML 1080×1350 con temas por competición
   templates/standings.js  plantilla de la tabla de posiciones de LigaPro

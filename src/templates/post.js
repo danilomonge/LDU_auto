@@ -179,7 +179,13 @@ export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, t
           <span class="sep"></span>
           <span class="s ${awayWon ? 'won' : ''}">${esc(match.away.score ?? '-')}</span>
         </div>
-        <div class="center-tag">${draw ? 'EMPATE' : 'RESULTADO FINAL'}</div>
+        <div class="center-tag">${
+          match.penalties
+            ? `PENALES ${esc(match.penalties.home)} - ${esc(match.penalties.away)}`
+            : draw
+              ? 'EMPATE'
+              : 'RESULTADO FINAL'
+        }</div>
       </div>`
     : `
       <div class="center">

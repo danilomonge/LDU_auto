@@ -30,6 +30,21 @@ test('extractScorers groups repeat scorers and keeps both sides apart', () => {
   assert.equal(away[0].name, 'Corozo');
 });
 
+test('extractScorers keeps penalties separate from open-play goals', () => {
+  const { home } = extractScorers(
+    [
+      goal(HOME, 'Michael Estrada', "12'"),
+      goal(HOME, 'Michael Estrada', "55'", 'Penalty - Scored'),
+    ],
+    HOME,
+    AWAY
+  );
+  assert.deepEqual(home, [
+    { name: 'Estrada', minutes: ["12'"], og: false, pen: false },
+    { name: 'Estrada', minutes: ["55'"], og: false, pen: true },
+  ]);
+});
+
 test('extractScorers ignores non-scoring events, misses and shootouts', () => {
   const { home, away } = extractScorers(
     [

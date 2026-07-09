@@ -83,6 +83,70 @@ test('live match produces nothing until completed', () => {
   assert.equal(posts.length, 0);
 });
 
+// A cup fixture (TheSportsDB) can slot in before an already-announced league
+// fixture (ESPN). When the cup match passes and the pointer returns to the
+// league match, it must NOT be re-announced — each real "next match" is
+// announced exactly once.
+test('cup fixture jumping ahead never re-announces the league fixture', () => {
+  const league = match('liga', '2026-07-12T17:00Z');
+  const { state: s1, posts: p1 } = planPosts([league], null, NOW);
+  assert.deepEqual(p1.map((p) => `${p.type}:${p.match.id}`), ['fixture:liga']);
+
+  // Copa Ecuador match appears later, kicking off before the league one.
+  const cup = { ...match('cup', '2026-07-09T01:00Z'), competitionType: 'copaecuador' };
+  const { state: s2, posts: p2 } = planPosts([cup, league], s1, NOW);
+  assert.deepEqual(p2.map((p) => `${p.type}:${p.match.id}`), ['fixture:cup']);
+
+  // Cup match finished → league match is "next" again → no duplicate post.
+  const cupDone = {
+    ...cup,
+    state: 'post', completed: true,
+    home: { ...cup.home, score: '1', winner: false },
+    away: { ...cup.away, score: '1', winner: true },
+  };
+  const after = new Date('2026-07-09T06:00:00Z');
+  const { posts: p3 } = planPosts([cupDone, league], s2, after);
+  assert.deepEqual(p3.map((p) => `${p.type}:${p.match.id}`), ['result:cup']);
+});
+
+test('a previously announced fixture is re-announced only if rescheduled', () => {
+  const league = match('liga', '2026-07-12T17:00Z');
+  const cup = { ...match('cup', '2026-07-09T01:00Z'), competitionType: 'copaecuador' };
+  const { state: s1 } = planPosts([league], null, NOW);
+  const { state: s2 } = planPosts([cup, league], s1, NOW);
+  // While the cup match is still next, the league game gets moved.
+  const moved = match('liga', '2026-07-13T00:00Z');
+  const after = new Date('2026-07-09T06:00:00Z');
+  const { posts } = planPosts([moved], s2, after);
+  assert.deepEqual(posts.map((p) => `${p.type}:${p.match.id}`), ['fixture:liga']);
+});
+
+test('legacy single-slot announcedFixture state migrates without re-posting', () => {
+  const league = match('liga', '2026-07-12T17:00Z');
+  const legacy = {
+    results: {},
+    announcedFixture: {
+      id: 'liga',
+      fingerprint: fingerprint(league),
+      name: 'LDU vs Rival',
+      date: league.date,
+    },
+  };
+  const { posts, state } = planPosts([league], legacy, NOW);
+  assert.equal(posts.length, 0);
+  assert.ok(state.fixtures.liga);
+  assert.equal(state.announcedFixture, undefined);
+});
+
+test('long-past announced fixtures are pruned from state', () => {
+  const old = match('old', '2026-05-01T00:00Z');
+  const league = match('liga', '2026-07-12T17:00Z');
+  const { state: s1 } = planPosts([old], null, new Date('2026-04-25T00:00Z'));
+  const { state } = planPosts([league], s1, NOW);
+  assert.equal(state.fixtures.old, undefined);
+  assert.ok(state.fixtures.liga);
+});
+
 test('fingerprint changes with score, state and date', () => {
   const a = fingerprint(match('x', '2026-07-10T00:00Z'));
   const b = fingerprint(match('x', '2026-07-10T00:00Z', { state: 'post', completed: true, hs: '1', as: '0' }));

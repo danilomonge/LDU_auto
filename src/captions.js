@@ -48,7 +48,7 @@ function pick(list, seed) {
 // The banks are original lines built from real LDU hinchada motifs (Ponciano,
 // Casa Blanca, viejo amigo, guambra, Centrales, Rey de Copas), without copying
 // full chants. The generated closer is deterministic but can vary across tens
-// of thousands of natural two-line combinations.
+// of thousands of natural two/three-line combinations.
 const CORE_HEART_LINES = [
   'Como te quiero, mi viejo amigo.',
   'Otra vez contigo, Liga querida.',
@@ -237,13 +237,14 @@ const RESULT_CLOSERS = {
   draw: buildCloserBank(DRAW_LINES), // 10,000
   loss: buildCloserBank(LOSS_LINES), // 10,000
 };
-const STANDINGS_CLOSERS = buildCloserBank(STANDINGS_LINES); // 4,000
+const STANDINGS_CLOSERS = buildCloserBank(STANDINGS_LINES); // 3,650
 
 export const captionClosersForTest = {
   fixture: FIXTURE_CLOSERS,
   win: RESULT_CLOSERS.win,
   draw: RESULT_CLOSERS.draw,
   loss: RESULT_CLOSERS.loss,
+  standings: STANDINGS_CLOSERS,
 };
 
 export function buildCaption(postType, match, extras = null) {
@@ -277,6 +278,10 @@ export function buildCaption(postType, match, extras = null) {
     loss: '⚪️🔴 Liga cayó.',
   }[outcome];
   const venue = match.venue ? `\n🏟️ ${match.venue}` : '';
+  // Cup ties decided from the spot: the 90' score alone would read wrong.
+  const pens = match.penalties
+    ? `\n🎯 Penales: ${match.penalties.home} - ${match.penalties.away}`
+    : '';
   // LDU goalscorers (from the ESPN match summary), when available.
   const lduScorers = (match.lduIsHome ? extras?.scorers?.home : extras?.scorers?.away) || [];
   const goals = lduScorers.length
@@ -287,6 +292,7 @@ export function buildCaption(postType, match, extras = null) {
   const closer = pick(RESULT_CLOSERS[outcome], match.id);
   return (
     `${opener} ${score}\n${comp.label}` +
+    pens +
     goals +
     venue +
     `\n\n${closer}\n\n${comp.hashtags}`

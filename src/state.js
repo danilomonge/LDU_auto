@@ -37,8 +37,11 @@ export function savePending(pending) {
 
 /**
  * Decide which posts to generate, mirroring fan-account behavior:
- * - "Próximo partido": always the single next upcoming match. Re-posted only
- *   when it changes (new match becomes next, or kickoff was rescheduled).
+ * - "Próximo partido": always the single next upcoming match across ALL
+ *   sources (ESPN + TheSportsDB cups). Announced fixtures are remembered per
+ *   match id, so when a cup game slots in before an already-announced league
+ *   game (or a source blips out and back), the pointer moving between them
+ *   never re-posts a fixture — only a genuine reschedule does.
  * - "Final del partido": once per newly-completed match. On the very first
  *   run only the most recent result is posted; older ones are baselined.
  * Returns { posts: [{match, type}], state } with state already updated.
@@ -47,6 +50,13 @@ export function planPosts(matches, state, now = new Date()) {
   const first = state === null;
   if (first) state = {};
   state.results ||= {};
+  state.fixtures ||= {};
+  // Migrate the legacy single-slot shape (pre cup-support states).
+  if (state.announcedFixture) {
+    const p = state.announcedFixture;
+    state.fixtures[p.id] ||= { fingerprint: p.fingerprint, name: p.name, date: p.date };
+    delete state.announcedFixture;
+  }
   const posts = [];
 
   const nextFixture = matches
@@ -55,16 +65,22 @@ export function planPosts(matches, state, now = new Date()) {
 
   if (nextFixture) {
     const fp = fingerprint(nextFixture);
-    const prev = state.announcedFixture;
-    if (!prev || prev.id !== nextFixture.id || prev.fingerprint !== fp) {
+    const prev = state.fixtures[nextFixture.id];
+    if (!prev || prev.fingerprint !== fp) {
       posts.push({ match: nextFixture, type: 'fixture' });
-      state.announcedFixture = {
-        id: nextFixture.id,
+      state.fixtures[nextFixture.id] = {
         fingerprint: fp,
         name: `${nextFixture.home.shortName} vs ${nextFixture.away.shortName}`,
         date: nextFixture.date,
       };
     }
+  }
+
+  // A past kickoff can never be "next" again (a real reschedule changes the
+  // fingerprint anyway), so long-past entries only bloat the state file.
+  const MAX_FIXTURE_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+  for (const [id, f] of Object.entries(state.fixtures)) {
+    if (now - new Date(f.date) > MAX_FIXTURE_AGE_MS) delete state.fixtures[id];
   }
 
   // Only results that finished recently are announced; anything older that we

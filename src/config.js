@@ -4,15 +4,16 @@ export const TEAM_ID = '4816'; // Liga de Quito on ESPN
 export const TEAM_NAME = 'Liga de Quito';
 export const TEAM_SHORT = 'LDU';
 
-// ESPN league codes polled on every run. Unknown/404 leagues are tolerated,
-// so speculative codes (e.g. a future Copa Ecuador slug) can stay listed.
+// ESPN league codes polled on every run. Copa Ecuador and Supercopa are NOT
+// here on purpose: ESPN has no data for them (the old speculative slugs
+// returned HTTP 400 forever, which is why cup matches were silently skipped).
+// Those competitions come from TheSportsDB (src/sportsdb.js); listing them
+// here again would risk double posts if ESPN ever adds them.
 export const LEAGUES = [
   'ecu.1',
   'conmebol.libertadores',
   'conmebol.sudamericana',
   'conmebol.recopa',
-  'ecu.supercopa',
-  'ecu.copa_ecuador',
   'club.friendly',
   'fifa.friendly',
 ];
@@ -56,8 +57,9 @@ export function classifyCompetition(slug, name = '') {
   if (slug === 'ecu.1' || n.includes('ligapro')) return 'ligapro';
   if (slug === 'conmebol.libertadores' || n.includes('libertadores')) return 'libertadores';
   if (slug === 'conmebol.sudamericana' || n.includes('sudamericana')) return 'sudamericana';
-  if (n.includes('copa ecuador') || slug === 'ecu.copa_ecuador') return 'copaecuador';
+  // "Supercopa Ecuador" contains "copa ecuador" — check it first.
   if (slug === 'ecu.supercopa' || n.includes('supercopa')) return 'supercopa';
+  if (n.includes('copa ecuador') || slug === 'ecu.copa_ecuador') return 'copaecuador';
   if (slug.includes('friendly') || n.includes('friendly') || n.includes('amistoso')) return 'amistoso';
   return 'otra';
 }

@@ -16,6 +16,12 @@ El proyecto hoy usa la API publica no oficial de ESPN para:
 - estadio, ciudad, logos, marcador y estado del partido;
 - publicacion en Instagram mediante Graph API.
 
+Actualizacion 2026-07-07: parte de esta investigacion ya se implemento. El
+repo ahora usa tambien `summary?event=<id>` para goleadores/racha y el endpoint
+`https://site.api.espn.com/apis/v2/sports/soccer/ecu.1/standings` para la tabla
+de LigaPro. La fila historica sobre `/ecu.1/standings` se conserva como nota de
+la prueba original, no como descripcion del codigo actual.
+
 Eso ya cubre el contenido mas seguro: fixture y resultado. Lo que falta es
 contexto: tabla, racha, incidencias, previa, resumen y monitoreo de noticias.
 
