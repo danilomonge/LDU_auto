@@ -65,12 +65,22 @@ los futuros.
 
 ## Renovación automática (token "eterno")
 
-El workflow **"Renew Meta access token"** corre los días 1 y 15 de cada mes.
-El token vigente vive cifrado (AES-256) en `data/token.enc`; el workflow lo
-descifra, lo intercambia por uno fresco de 60 días con las credenciales de la
-app, **verifica que el nuevo funciona** y lo vuelve a cifrar y commitear. Los
-workflows de publicación y diagnóstico lo descifran en cada ejecución. Sin
-PAT de GitHub y sin tocar secrets nunca más.
+**Estado actual (desde 2026-07-09): la renovación programada está
+desactivada.** La publicación usa un token de usuario que **no caduca** en el
+secret `IG_ACCESS_TOKEN`; el token de página se deriva al vuelo en cada
+publicación (`src/publish.js` vía `/me/accounts`), así que no hay nada que
+renovar.
+
+El workflow **"Renew Meta access token"** sigue disponible, pero solo con
+lanzamiento manual (Actions → Run workflow), por si algún día vuelve a usarse
+un token que caduque: mantiene el token vigente cifrado (AES-256) en
+`data/token.enc`, lo intercambia por uno fresco de 60 días con las
+credenciales de la app, **verifica que el nuevo funciona** y lo vuelve a
+cifrar y commitear; los workflows de publicación y diagnóstico lo descifran
+en cada ejecución (con el secret como respaldo). Para reactivar el ciclo:
+pon un token válido en el secret `FB_USER_TOKEN`, lanza el workflow una vez
+y restaura el bloque `schedule` en
+[renew-token.yml](../.github/workflows/renew-token.yml).
 
 Secrets que usa:
 
