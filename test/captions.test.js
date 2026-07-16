@@ -45,13 +45,32 @@ function closerLines(caption) {
 const genericConOpener = /^Con (confianza|calma|determinación|humildad|respeto|paciencia|enfoque|actitud|seriedad|convicción|orgullo|satisfacción|alegría|gratitud|ilusión|serenidad|constancia|templanza|autocrítica|esperanza)[,.]/i;
 
 test('fixture caption uses a natural hinchada line instead of a rigid formula', () => {
-  const caption = buildCaption('fixture', match('sample-ligapro-fix'));
+  // Announced days before kickoff — must use the time-neutral bank.
+  const daysBefore = new Date('2026-07-09T15:00Z');
+  const caption = buildCaption('fixture', match('sample-ligapro-fix'), null, daysBefore);
   const line = closer(caption);
   const lines = closerLines(caption);
   assert.doesNotMatch(line, genericConOpener);
-  assert.match(line, /\b(Liga|alb[ao]s?|hinchada|Casa Blanca|Ponciano|camiseta|viejo amigo|La U)\b/i);
-  assert.ok(lines.length >= 2);
-  for (const part of lines) assert.ok(part.length <= 80, `fixture line is too long: ${part}`);
+  assert.match(line, /\b(Liga|alb[ao]s?|hinchada|Casa Blanca|Ponciano|camiseta|viejo amigo|La U|Centrales|Rey de Copas|blanca)\b/i);
+  assert.equal(lines.length, 1, `fixture closer must be a single line: ${line}`);
+  for (const part of lines) assert.ok(part.length <= 60, `fixture line is too long: ${part}`);
+  assert.ok(captionClosersForTest.fixture.includes(line), `not from the neutral bank: ${line}`);
+});
+
+test('fixture closer says "hoy" only when posted on the match day', () => {
+  // The announcement usually goes out days early, so the neutral bank must
+  // never claim the match is today.
+  for (const line of captionClosersForTest.fixture) {
+    assert.doesNotMatch(line, /\bhoy\b/i, `neutral fixture line claims "hoy": ${line}`);
+  }
+  // Same match, generated on match day (kickoff 12:00 Ecuador): matchday bank.
+  const matchDay = new Date('2026-07-12T15:00Z');
+  const line = closer(buildCaption('fixture', match('sample-ligapro-fix'), null, matchDay));
+  assert.ok(captionClosersForTest.matchday.includes(line), `not from the matchday bank: ${line}`);
+  // Unconfirmed kickoff times can't back a same-day claim.
+  const tbd = { ...match('sample-ligapro-fix'), timeValid: false };
+  const tbdLine = closer(buildCaption('fixture', tbd, null, matchDay));
+  assert.ok(captionClosersForTest.fixture.includes(tbdLine), `timeValid=false must use the neutral bank: ${tbdLine}`);
 });
 
 test('result captions keep the closer concise and tied to Liga', () => {
@@ -68,9 +87,9 @@ test('result captions keep the closer concise and tied to Liga', () => {
     const line = closer(caption);
     const lines = closerLines(caption);
     assert.doesNotMatch(line, genericConOpener);
-    assert.match(line, /\b(Liga|alb[ao]s?|hinchada|Casa Blanca|Ponciano|camiseta|viejo amigo|La U)\b/i);
-    assert.ok(lines.length >= 2);
-    for (const part of lines) assert.ok(part.length <= 80, `result line is too long: ${part}`);
+    assert.match(line, /\b(Liga|alb[ao]s?|hinchada|Casa Blanca|Ponciano|camiseta|viejo amigo|La U|Centrales|Rey de Copas|blanca)\b/i);
+    assert.equal(lines.length, 1, `result closer must be a single line: ${line}`);
+    for (const part of lines) assert.ok(part.length <= 60, `result line is too long: ${part}`);
   }
 });
 
@@ -85,17 +104,15 @@ test('caption banks have broad variety without burned-out filler or toxic rivalr
   ];
 
   for (const [name, lines] of Object.entries(captionClosersForTest)) {
-    const minUnique = name === 'standings' ? 100 : 200;
+    const minUnique = { standings: 45, matchday: 80 }[name] ?? 100;
     assert.ok(new Set(lines).size >= minUnique, `${name} should have at least ${minUnique} unique closers`);
+    assert.equal(new Set(lines).size, lines.length, `${name} bank contains duplicate lines`);
     for (const line of lines) {
-      assert.ok(line.length <= 120, `${name} closer is too long: ${line}`);
+      assert.ok(!line.includes('\n'), `${name} closer must be a single line: ${line}`);
+      assert.ok(line.length <= 60, `${name} closer is too long: ${line}`);
       assert.doesNotMatch(line, genericConOpener);
+      // Every closer must name the team — no generic motivational filler.
       assert.match(line, /\b(Liga|alb[ao]s?|Casa Blanca|Ponciano|camiseta|viejo amigo|La U|Centrales|Rey de Copas|blanca)\b/i);
-      const parts = line.split('\n');
-      assert.ok(parts.length <= 2, `${name} closer stacks too many lines: ${line}`);
-      for (const part of parts) {
-        assert.ok(part.length <= 60, `${name} closer line is too long: ${part}`);
-      }
       for (const pattern of banned) assert.doesNotMatch(line, pattern);
     }
   }
