@@ -85,6 +85,7 @@ export function planPosts(matches, state, now = new Date()) {
     state.results[m.id] = {
       posted: true,
       date: m.date,
+      postedAt: now.toISOString(),
       score: `${m.home.score}-${m.away.score}`,
       name: `${m.home.shortName} vs ${m.away.shortName}`,
     };
@@ -93,14 +94,22 @@ export function planPosts(matches, state, now = new Date()) {
   // The fixture announcement is queued AFTER any results so the feed reads
   // chronologically: "final del partido" first, "próximo partido" on top.
   //
-  // While an LDU match is live (state 'in'), it has already dropped out of
-  // the 'pre' filter below, so without this guard the pointer would jump
-  // straight to the match AFTER it and announce that one mid-game — before
-  // the live match's own result has even been posted. Hold off announcing
-  // anything until the live match is resolved (it'll post its result, then
-  // this same check runs again and picks up the real next fixture).
+  // Two guards, covering different gaps:
+  //  - While an LDU match is live (state 'in'), it has already dropped out
+  //    of the 'pre' filter below, so without this the pointer would jump
+  //    straight to the match AFTER it and announce that one mid-game.
+  //  - A live match can also be missed entirely (a match can go straight
+  //    'pre' → 'post' between two hourly polls, e.g. after workflow
+  //    downtime), so the state-based guard alone isn't robust. Require a
+  //    real wall-clock margin since the last result POSTED (not kickoff),
+  //    giving that post room to actually land — retries, workflow delays,
+  //    Graph API hiccups — before the feed moves on to the next fixture.
+  const FIXTURE_MARGIN_MS = 2 * 60 * 60 * 1000;
   const hasLiveMatch = matches.some((m) => m.state === 'in');
-  const nextFixture = hasLiveMatch ? undefined : matches
+  const resultRecentlyPosted = Object.values(state.results).some(
+    (r) => r.posted && r.postedAt && now - new Date(r.postedAt) < FIXTURE_MARGIN_MS
+  );
+  const nextFixture = (hasLiveMatch || resultRecentlyPosted) ? undefined : matches
     .filter((m) => m.state === 'pre' && new Date(m.date) > now)
     .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
 
