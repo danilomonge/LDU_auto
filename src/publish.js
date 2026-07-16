@@ -175,6 +175,19 @@ async function publishWithFallback(account, imageUrl, caption) {
   }
 }
 
+// A fixture announcement is worthless once the match has kicked off. If the
+// queue was stuck past kickoff (token outage, repeated publish failures), the
+// entry must be dropped, not published — "próximo partido" for a game already
+// played, possibly captioned "hoy juega". Entries queued before matchDate was
+// recorded fall back to the filename's YYYY-MM-DD prefix (the kickoff's UTC
+// date), which can only be more than a day old after kickoff has passed.
+export function isStaleFixture(item, now = new Date()) {
+  if (item.type !== 'fixture') return false;
+  if (item.matchDate) return now >= new Date(item.matchDate);
+  const day = /^(\d{4}-\d{2}-\d{2})_/.exec(item.file || '')?.[1];
+  return day ? now - new Date(`${day}T00:00:00Z`) > 24 * 60 * 60 * 1000 : false;
+}
+
 export async function publishPending() {
   const accounts = configuredAccounts();
   const base = imageBaseUrl();
@@ -199,6 +212,10 @@ export async function publishPending() {
   for (const item of pending) {
     if (!fs.existsSync(`${PATHS.outDir}/${item.file}`)) {
       console.log(`Skipping ${item.file} — file missing locally, dropping from queue.`);
+      continue;
+    }
+    if (isStaleFixture(item)) {
+      console.log(`Skipping ${item.file} — kickoff already passed, dropping stale fixture from queue.`);
       continue;
     }
     const imageUrl = `${base}/${encodeURIComponent(item.file)}`;

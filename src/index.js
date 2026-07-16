@@ -97,10 +97,12 @@ async function generate() {
   }
 
   const pending = loadPending();
-  const queue = (eventId, type, file, caption) => {
+  const queue = (eventId, type, file, caption, matchDate = null) => {
     // Replace any stale pending entry for the same event+type (rescheduled).
+    // matchDate (fixtures) lets publish drop the entry if the queue ever gets
+    // stuck past kickoff.
     const filtered = pending.filter((p) => !(p.eventId === eventId && p.type === type));
-    filtered.push({ eventId, type, file, caption, createdAt: new Date().toISOString() });
+    filtered.push({ eventId, type, file, caption, matchDate, createdAt: new Date().toISOString() });
     pending.length = 0;
     pending.push(...filtered);
   };
@@ -111,7 +113,7 @@ async function generate() {
     // Scorers (results) and last-five form (fixtures); null when unavailable.
     const extras = await fetchMatchExtras(match);
     const { file, caption } = await renderPost(match, type, PATHS.outDir, extras);
-    queue(match.id, type, file, caption);
+    queue(match.id, type, file, caption, match.date);
     generated += 1;
   }
 

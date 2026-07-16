@@ -126,8 +126,9 @@ export function planPosts(matches, state, now = new Date()) {
     }
   }
 
-  // Note: nothing volatile (e.g. timestamps) is stored, so a no-op run leaves
-  // the state file byte-identical and the workflow commits nothing.
+  // Note: volatile fields (postedAt) are only written when a post is planned,
+  // so a no-op run leaves the state file byte-identical and the workflow
+  // commits nothing.
   return { posts, state };
 }
 

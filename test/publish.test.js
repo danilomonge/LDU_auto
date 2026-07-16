@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { configuredAccounts, isAuthError, resolvePageToken } from '../src/publish.js';
+import { configuredAccounts, isAuthError, isStaleFixture, resolvePageToken } from '../src/publish.js';
 
 function withFetch(impl, fn) {
   const saved = globalThis.fetch;
@@ -101,6 +101,30 @@ test('page-token resolution is cached per token', async () => {
       assert.equal(calls, 1);
     }
   );
+});
+
+// A fixture stuck in the queue past kickoff (token outage, repeated publish
+// failures) must be dropped, not announced after the match already happened.
+test('a queued fixture goes stale at kickoff; results and standings never do', () => {
+  const fixture = {
+    type: 'fixture',
+    file: '2026-07-12_401859608_fixture.png',
+    matchDate: '2026-07-12T17:00Z',
+  };
+  assert.equal(isStaleFixture(fixture, new Date('2026-07-12T16:59Z')), false);
+  assert.equal(isStaleFixture(fixture, new Date('2026-07-12T17:00Z')), true);
+  assert.equal(isStaleFixture(fixture, new Date('2026-07-13T09:00Z')), true);
+
+  // Entries queued before matchDate existed: the filename's YYYY-MM-DD prefix
+  // is the kickoff's UTC date, so >24h old can only happen after kickoff.
+  const legacy = { type: 'fixture', file: '2026-07-12_401859608_fixture.png' };
+  assert.equal(isStaleFixture(legacy, new Date('2026-07-12T23:00Z')), false);
+  assert.equal(isStaleFixture(legacy, new Date('2026-07-14T01:00Z')), true);
+
+  // Results and the standings table are still worth publishing late.
+  const when = new Date('2026-07-20T00:00Z');
+  assert.equal(isStaleFixture({ type: 'result', file: '2026-07-12_x_result.png', matchDate: '2026-07-12T17:00Z' }, when), false);
+  assert.equal(isStaleFixture({ type: 'standings', file: '2026-07-12_tabla-f19_standings.png' }, when), false);
 });
 
 test('isAuthError recognizes OAuth/token failures but not transient ones', () => {
