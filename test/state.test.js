@@ -196,6 +196,35 @@ test('lifecycle: league + cup interleave without duplicate or missing posts', ()
   ]);
 });
 
+// Root cause of "next match" posting before the result it should follow:
+// once the current match kicks off (state 'in'), it drops out of the 'pre'
+// filter, so the pointer used to jump straight to the match AFTER it and
+// announce that one mid-game — well before the live match's own result was
+// posted. The announcement must wait until the live match is resolved.
+test('next fixture is not announced while an LDU match is live', () => {
+  const liga12 = match('liga12', '2026-07-12T17:00Z');
+  const { state: s1 } = planPosts([liga12], null, NOW);
+
+  // liga12 kicks off; liga15 is a brand-new match ESPN just added to the
+  // schedule, chronologically after liga12, never announced before.
+  const liga12Live = { ...liga12, state: 'in', hs: '0', as: '0' };
+  const liga15 = match('liga15', '2026-07-15T22:00Z');
+  const duringMatch = new Date('2026-07-12T17:30:00Z');
+  const { posts, state: s2 } = planPosts([liga12Live, liga15], s1, duringMatch);
+  assert.deepEqual(posts, []);
+
+  // liga12 finishes → its result posts, and only now does liga15 get
+  // announced, in that order.
+  const liga12Done = {
+    ...liga12, state: 'post', completed: true,
+    home: { ...liga12.home, score: '2', winner: true },
+    away: { ...liga12.away, score: '0', winner: false },
+  };
+  const afterMatch = new Date('2026-07-12T19:10:00Z');
+  const { posts: posts2 } = planPosts([liga12Done, liga15], s2, afterMatch);
+  assert.deepEqual(posts2.map((p) => `${p.type}:${p.match.id}`), ['result:liga12', 'fixture:liga15']);
+});
+
 test('fingerprint changes with score, state and date', () => {
   const a = fingerprint(match('x', '2026-07-10T00:00Z'));
   const b = fingerprint(match('x', '2026-07-10T00:00Z', { state: 'post', completed: true, hs: '1', as: '0' }));

@@ -92,7 +92,15 @@ export function planPosts(matches, state, now = new Date()) {
 
   // The fixture announcement is queued AFTER any results so the feed reads
   // chronologically: "final del partido" first, "próximo partido" on top.
-  const nextFixture = matches
+  //
+  // While an LDU match is live (state 'in'), it has already dropped out of
+  // the 'pre' filter below, so without this guard the pointer would jump
+  // straight to the match AFTER it and announce that one mid-game — before
+  // the live match's own result has even been posted. Hold off announcing
+  // anything until the live match is resolved (it'll post its result, then
+  // this same check runs again and picks up the real next fixture).
+  const hasLiveMatch = matches.some((m) => m.state === 'in');
+  const nextFixture = hasLiveMatch ? undefined : matches
     .filter((m) => m.state === 'pre' && new Date(m.date) > now)
     .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
 
