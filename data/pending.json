@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "eventId": "401859715",
+    "type": "result",
+    "file": "2026-07-18_401859715_result.png",
+    "caption": "⚪️🔴 Empate. LDU 0 - 1 Leones\nLIGAPRO · SERIE A\n🏟️ Estadio Rodrigo Paz Delgado\n\nEl hincha de Liga quiere victorias.\n\n#LDU #LigaDeQuito #LigaPro #SerieA #FutbolEcuatoriano",
+    "matchDate": "2026-07-18T21:30Z",
+    "createdAt": "2026-07-18T23:41:52.455Z"
+  },
+  {
+    "eventId": "tabla-f19",
+    "type": "standings",
+    "file": "2026-07-18_tabla-f19_standings.png",
+    "caption": "⚪️🔴 Así está la tabla de la LigaPro tras la fecha 19.\n📊 LDU: 6.º con 28 puntos (19 PJ, +4 DG).\n🔝 Líder: Ind. del Valle con 46 puntos.\n\nCada punto albo cuesta y vale.\n\n#LDU #LigaDeQuito #LigaPro #SerieA #TablaDePosiciones #FutbolEcuatoriano",
+    "matchDate": null,
+    "createdAt": "2026-07-18T23:41:53.794Z"
+  }
+]
