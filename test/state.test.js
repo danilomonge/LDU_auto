@@ -261,6 +261,33 @@ test('next fixture waits at least 2 hours after a result posts, even in the same
   assert.deepEqual(r3.posts.map((p) => `${p.type}:${p.match.id}`), ['fixture:m2']);
 });
 
+// Defense in depth for the "Empate cuando fue derrota" incident: ESPN can flip
+// a match to completed a beat before it fills the final score in. Posting then
+// yields "LDU - - -" and an undecided scoreline that defaults to a draw. Such a
+// match must be deferred (left unrecorded) until the score lands — and the next
+// fixture must not be announced over it in the meantime.
+test('a completed match with no settled score is deferred, not posted as a phantom draw', () => {
+  const pre = [match('m1', '2026-07-07T00:00Z'), match('m2', '2026-07-20T00:00Z')];
+  const { state: s1 } = planPosts(pre, null, NOW);
+
+  const unsettled = [
+    match('m1', '2026-07-07T00:00Z', { state: 'post', completed: true, hs: null, as: null }),
+    match('m2', '2026-07-20T00:00Z'),
+  ];
+  const later = new Date('2026-07-07T02:00:00Z');
+  const r = planPosts(unsettled, s1, later);
+  assert.deepEqual(r.posts, [], 'no phantom result, and next fixture held');
+  assert.equal(r.state.results.m1, undefined, 'unrecorded → retried next poll');
+
+  // Score lands → the result finally posts (correctly, as a loss).
+  const settled = [
+    match('m1', '2026-07-07T00:00Z', { state: 'post', completed: true, hs: '0', as: '1', aWin: true }),
+    match('m2', '2026-07-20T00:00Z'),
+  ];
+  const r2 = planPosts(settled, r.state, later);
+  assert.deepEqual(r2.posts.map((p) => `${p.type}:${p.match.id}`), ['result:m1']);
+});
+
 test('fingerprint changes with score, state and date', () => {
   const a = fingerprint(match('x', '2026-07-10T00:00Z'));
   const b = fingerprint(match('x', '2026-07-10T00:00Z', { state: 'post', completed: true, hs: '1', as: '0' }));

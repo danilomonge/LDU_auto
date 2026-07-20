@@ -123,7 +123,13 @@ async function generate() {
   );
   if (ligaproResultPosted) {
     const standings = await fetchStandings();
-    if (planStandingsPost(standings, state, true)) {
+    // LDU's completed LigaPro games we can already see (the ecu.1 team schedule
+    // IS LDU's LigaPro fixtures) — used to detect a table that hasn't yet
+    // absorbed the match we just posted, so we never publish a stale fecha.
+    const expectedPlayed = matches.filter(
+      (m) => m.competitionType === 'ligapro' && m.completed
+    ).length;
+    if (planStandingsPost(standings, state, true, expectedPlayed)) {
       console.log('Rendering standings post: LigaPro table');
       const { eventId, file, caption } = await renderStandingsPost(standings, PATHS.outDir);
       queue(eventId, 'standings', file, caption);

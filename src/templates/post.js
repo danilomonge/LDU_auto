@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { matchWinners } from '../outcome.js';
 
 // Fonts are bundled (assets/fonts) and inlined as data URIs so rendering
 // never depends on Google Fonts being reachable. All three are variable
@@ -162,9 +163,11 @@ export function renderPostHtml({ postType, match, homeLogo, awayLogo, dayLine, t
   const isResult = postType === 'result';
   const headline = isResult ? 'FINAL DEL<br/>PARTIDO' : 'PRÓXIMO<br/>PARTIDO';
 
-  const homeWon = match.home.winner;
-  const awayWon = match.away.winner;
-  const draw = isResult && !homeWon && !awayWon;
+  // Outcome comes from the scoreline (see src/outcome.js), never straight from
+  // ESPN's laggy winner flags, so the image can't print "EMPATE" on a game the
+  // scoreline already decided.
+  const { homeWon, awayWon, draw: isDraw } = matchWinners(match);
+  const draw = isResult && isDraw;
 
   // Result posters list goalscorers; fixture posters show last-five form.
   const extrasHtml = isResult

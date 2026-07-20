@@ -202,43 +202,67 @@ export async function fetchMatchExtras(match) {
 const STANDINGS_URL = 'https://site.api.espn.com/apis/v2/sports/soccer/ecu.1/standings';
 
 /**
- * Fetch the LigaPro table, normalized:
+ * Choose which stage/group table to read from a standings payload. LigaPro
+ * currently exposes a single stage, but a season split into etapas lists
+ * several; prefer the stage that actually contains LDU (the table this account
+ * is about), and among ties the last one — the most recent phase. Blindly
+ * taking the FIRST stage would keep showing a finished etapa after the next
+ * one has already started.
+ */
+export function selectStandingsStage(children = [], teamId = TEAM_ID) {
+  const withEntries = (children || []).filter((c) => c.standings?.entries?.length);
+  if (!withEntries.length) return null;
+  const withLdu = withEntries.filter((c) =>
+    c.standings.entries.some((e) => e.team?.id === teamId)
+  );
+  const pool = withLdu.length ? withLdu : withEntries;
+  return pool[pool.length - 1];
+}
+
+/**
+ * Normalize a raw ESPN standings payload into:
  * { seasonName, stageName, entries: [{rank, team:{id,name,shortName,abbrev,logo},
  *   played, wins, draws, losses, goalsFor, goalsAgainst, goalDiff, points}] }
- * Entries come sorted by rank. Returns null on any failure.
+ * Entries come sorted by rank. Pure (no network) so it can be unit tested.
+ * Returns null when the table can't be trusted (no stage, or a missing rank).
  */
+export function normalizeStandings(data, teamId = TEAM_ID) {
+  const stage = selectStandingsStage(data?.children, teamId);
+  if (!stage) return null;
+  const stat = (e, name) => e.stats?.find((s) => s.name === name);
+  const entries = (stage.standings.entries || [])
+    .map((e) => ({
+      rank: stat(e, 'rank')?.value ?? null,
+      team: {
+        id: e.team?.id,
+        name: e.team?.displayName,
+        shortName: e.team?.shortDisplayName || e.team?.displayName,
+        abbrev: e.team?.abbreviation || '',
+        logo: pickLogo(e.team, false),
+      },
+      played: stat(e, 'gamesPlayed')?.value ?? 0,
+      wins: stat(e, 'wins')?.value ?? 0,
+      draws: stat(e, 'ties')?.value ?? 0,
+      losses: stat(e, 'losses')?.value ?? 0,
+      goalsFor: stat(e, 'pointsFor')?.value ?? 0,
+      goalsAgainst: stat(e, 'pointsAgainst')?.value ?? 0,
+      goalDiff: stat(e, 'pointDifferential')?.displayValue || '0',
+      points: stat(e, 'points')?.value ?? 0,
+    }))
+    .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+  if (!entries.length || entries.some((e) => e.rank == null)) return null;
+  return {
+    seasonName: stage.standings.seasonDisplayName || 'LigaPro',
+    stageName: stage.name || '',
+    entries,
+  };
+}
+
+// Fetch the LigaPro table, normalized (see normalizeStandings). Returns null
+// on any network/parse failure so the caller renders nothing rather than junk.
 export async function fetchStandings() {
   try {
-    const data = await fetchJson(STANDINGS_URL);
-    const stage = (data.children || []).find((c) => c.standings?.entries?.length);
-    if (!stage) return null;
-    const stat = (e, name) => e.stats?.find((s) => s.name === name);
-    const entries = (stage.standings.entries || [])
-      .map((e) => ({
-        rank: stat(e, 'rank')?.value ?? null,
-        team: {
-          id: e.team?.id,
-          name: e.team?.displayName,
-          shortName: e.team?.shortDisplayName || e.team?.displayName,
-          abbrev: e.team?.abbreviation || '',
-          logo: pickLogo(e.team, false),
-        },
-        played: stat(e, 'gamesPlayed')?.value ?? 0,
-        wins: stat(e, 'wins')?.value ?? 0,
-        draws: stat(e, 'ties')?.value ?? 0,
-        losses: stat(e, 'losses')?.value ?? 0,
-        goalsFor: stat(e, 'pointsFor')?.value ?? 0,
-        goalsAgainst: stat(e, 'pointsAgainst')?.value ?? 0,
-        goalDiff: stat(e, 'pointDifferential')?.displayValue || '0',
-        points: stat(e, 'points')?.value ?? 0,
-      }))
-      .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
-    if (!entries.length || entries.some((e) => e.rank == null)) return null;
-    return {
-      seasonName: stage.standings.seasonDisplayName || 'LigaPro',
-      stageName: stage.name || '',
-      entries,
-    };
+    return normalizeStandings(await fetchJson(STANDINGS_URL));
   } catch {
     return null;
   }

@@ -3,10 +3,18 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { PATHS } from './config.js';
+import { PATHS, TEAM_ID } from './config.js';
 
 export function fingerprint(match) {
   return [match.state, match.home.score ?? '', match.away.score ?? '', match.date].join('|');
+}
+
+// A completed match whose final score ESPN hasn't filled in yet must not be
+// posted: the caption would read "LDU - - -" and an undecided scoreline
+// defaults to "Empate". True only once BOTH sides carry a real number.
+export function hasSettledScore(match) {
+  const isNum = (v) => Number.isFinite(parseInt(v, 10));
+  return isNum(match.home?.score) && isNum(match.away?.score);
 }
 
 export function loadState() {
@@ -81,6 +89,9 @@ export function planPosts(matches, state, now = new Date()) {
       state.results[m.id] = { baselined: true, date: m.date };
       continue;
     }
+    // Defense in depth: defer a result whose score hasn't settled yet, leaving
+    // it unrecorded so a later poll posts it once ESPN fills the score in.
+    if (!hasSettledScore(m)) continue;
     posts.push({ match: m, type: 'result' });
     state.results[m.id] = {
       posted: true,
@@ -109,7 +120,15 @@ export function planPosts(matches, state, now = new Date()) {
   const resultRecentlyPosted = Object.values(state.results).some(
     (r) => r.posted && r.postedAt && now - new Date(r.postedAt) < FIXTURE_MARGIN_MS
   );
-  const nextFixture = (hasLiveMatch || resultRecentlyPosted) ? undefined : matches
+  // A just-finished match whose score hasn't settled (deferred above) is still
+  // "in play" as far as the feed is concerned — don't announce the next fixture
+  // over it, the same way a live match holds the pointer.
+  const hasUnsettledResult = completed.some(
+    (m) => !state.results[m.id] &&
+      now - new Date(m.date) <= MAX_RESULT_AGE_MS &&
+      !hasSettledScore(m)
+  );
+  const nextFixture = (hasLiveMatch || resultRecentlyPosted || hasUnsettledResult) ? undefined : matches
     .filter((m) => m.state === 'pre' && new Date(m.date) > now)
     .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
 
@@ -143,10 +162,22 @@ export function standingsFingerprint(standings) {
  * LigaPro result went out (the natural "tabla tras la fecha" moment) and only
  * if the table actually changed since the last standings post — re-runs and
  * rescheduled result posts never duplicate it.
+ *
+ * `expectedPlayed` (LDU's completed LigaPro games we can already see in the
+ * feed) guards against ESPN's aggregated table lagging the match that just
+ * finished: if the fetched table shows FEWER LDU games than that, it hasn't
+ * absorbed the result yet, so posting it would put out a "tabla desactualizada"
+ * with the wrong fecha and points. In that case we defer — a later run posts
+ * it once ESPN catches up. Passing null skips the check.
+ *
  * Mutates state; returns true when a standings post should be generated.
  */
-export function planStandingsPost(standings, state, resultJustPosted) {
+export function planStandingsPost(standings, state, resultJustPosted, expectedPlayed = null) {
   if (!standings || !resultJustPosted) return false;
+  if (expectedPlayed != null) {
+    const ldu = standings.entries.find((e) => e.team.id === TEAM_ID);
+    if (ldu && ldu.played != null && ldu.played < expectedPlayed) return false;
+  }
   const fp = standingsFingerprint(standings);
   if (state.standings?.fingerprint === fp) return false;
   state.standings = { fingerprint: fp };

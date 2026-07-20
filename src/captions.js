@@ -1,6 +1,7 @@
 // Spanish Instagram captions per post type and outcome.
 
 import { COMPETITION_TYPES, TEAM_ID, TIMEZONE } from './config.js';
+import { lduOutcome } from './outcome.js';
 
 const fmtTime = new Intl.DateTimeFormat('es-EC', {
   hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TIMEZONE,
@@ -23,14 +24,6 @@ export function formatDayLine(dateIso, timeValid = true) {
 export function formatTimeLine(dateIso, timeValid = true) {
   if (!timeValid) return null;
   return fmtTime.format(new Date(dateIso));
-}
-
-function lduOutcome(match) {
-  const ldu = match.lduIsHome ? match.home : match.away;
-  const rival = match.lduIsHome ? match.away : match.home;
-  if (ldu.winner) return 'win';
-  if (rival.winner) return 'loss';
-  return 'draw';
 }
 
 // ESPN disambiguates names like "Libertad (Ecuador)" — drop the parenthetical.

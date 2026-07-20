@@ -93,6 +93,53 @@ test('result captions keep the closer concise and tied to Liga', () => {
   }
 });
 
+// The opener (Ganó / Empate / Liga cayó) must always agree with the scoreline.
+// ESPN publishes the final score at full time but sets the per-side `winner`
+// booleans a few minutes later; a poll landing in that window sees a completed
+// match with real scores and BOTH winner flags still false. The outcome must
+// come from the scores, not those flags — otherwise a 0-1 loss is captioned
+// "Empate." (the real LDU-vs-Leones incident, 2026-07-18).
+function opener(caption) {
+  return caption.split('\n')[0];
+}
+
+test('result opener follows the score even when ESPN has not set winner flags yet', () => {
+  const cases = [
+    // [lduIsHome, lduScore, rivalScore, expected opener fragment]
+    [true, '0', '1', 'Liga cayó'], // Leones: LDU home, lost 0-1, flags unset
+    [false, '1', '0', '¡Ganó Liga!'], // LDU away, won 1-0, flags unset
+    [true, '1', '0', '¡Ganó Liga!'],
+    [false, '1', '2', 'Liga cayó'], // LDU away scored 1, conceded 2
+    [true, '1', '1', 'Empate'], // a genuine draw is still a draw
+    [true, '3', '3', 'Empate'],
+  ];
+  for (const [lduIsHome, lduScore, rivalScore, expected] of cases) {
+    const caption = buildCaption('result', match('score-first', {
+      postType: 'result', lduIsHome, lduScore, rivalScore,
+    }));
+    assert.ok(
+      opener(caption).includes(expected),
+      `LDU ${lduIsHome ? 'home' : 'away'} ${lduScore}-${rivalScore} → expected "${expected}", got: ${opener(caption)}`
+    );
+  }
+});
+
+test('result outcome falls back to winner flags only when scores are missing', () => {
+  const lost = buildCaption('result', match('flags-loss', { postType: 'result', outcome: 'loss' }));
+  assert.ok(opener(lost).includes('Liga cayó'), opener(lost));
+  const won = buildCaption('result', match('flags-win', { postType: 'result', outcome: 'win' }));
+  assert.ok(opener(won).includes('¡Ganó Liga!'), opener(won));
+});
+
+test('a level scoreline decided on penalties reads as a win/loss, not a draw', () => {
+  const base = match('pens', { postType: 'result', lduIsHome: true, lduScore: '1', rivalScore: '1' });
+  const won = buildCaption('result', { ...base, penalties: { home: 4, away: 2 } });
+  assert.ok(opener(won).includes('¡Ganó Liga!'), `pens win: ${opener(won)}`);
+  assert.match(won, /🎯 Penales: 4 - 2/);
+  const lost = buildCaption('result', { ...base, penalties: { home: 2, away: 4 } });
+  assert.ok(opener(lost).includes('Liga cayó'), `pens loss: ${opener(lost)}`);
+});
+
 test('caption banks have broad variety without burned-out filler or toxic rivalry copy', () => {
   const banned = [
     /cada partido es una final/i,

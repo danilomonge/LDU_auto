@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractScorers, extractForm } from '../src/espn.js';
+import { extractScorers, extractForm, normalizeStandings, selectStandingsStage } from '../src/espn.js';
 import { planStandingsPost, standingsFingerprint } from '../src/state.js';
 import { selectRows } from '../src/templates/standings.js';
 import { buildStandingsCaption } from '../src/captions.js';
@@ -112,6 +112,68 @@ test('selectRows: top 6 + gap + LDU neighborhood when LDU is lower', () => {
 test('selectRows: LDU last — neighborhood clamps to table end', () => {
   const rows = selectRows(tableWithLduAt(16).entries);
   assert.deepEqual(rows.slice(7).map((r) => r.rank), [14, 15, 16]);
+});
+
+// --- Standings normalization: stage selection + freshness ------------------
+
+const rawStage = (name, rows) => ({
+  name,
+  standings: {
+    seasonDisplayName: '2026 LigaPro Ecuador',
+    entries: rows.map(([rank, id, points, played]) => ({
+      team: {
+        id: String(id), displayName: `Team ${id}`,
+        shortDisplayName: `T${id}`, abbreviation: `T${id}`, logos: [],
+      },
+      stats: [
+        { name: 'rank', value: rank },
+        { name: 'points', value: points },
+        { name: 'gamesPlayed', value: played },
+        { name: 'wins', value: 0 }, { name: 'ties', value: 0 }, { name: 'losses', value: 0 },
+        { name: 'pointsFor', value: 0 }, { name: 'pointsAgainst', value: 0 },
+        { name: 'pointDifferential', displayValue: '+0' },
+      ],
+    })),
+  },
+});
+
+test('normalizeStandings reads a single-stage LigaPro table', () => {
+  const data = { children: [rawStage('First Stage', [[1, 17086, 49, 20], [6, HOME, 28, 20]])] };
+  const s = normalizeStandings(data);
+  assert.equal(s.stageName, 'First Stage');
+  assert.equal(s.entries[0].team.id, '17086');
+  assert.equal(s.entries.find((e) => e.team.id === HOME).played, 20);
+});
+
+test('normalizeStandings picks the stage that actually contains LDU', () => {
+  // An unrelated group is listed first; the real LigaPro table (with LDU) is
+  // second. Blindly taking the first stage would show the wrong table.
+  const data = { children: [
+    rawStage('Some Other Group', [[1, 900, 30, 12], [2, 901, 20, 12]]),
+    rawStage('First Stage', [[1, 17086, 49, 20], [6, HOME, 28, 20]]),
+  ] };
+  const s = normalizeStandings(data);
+  assert.equal(s.stageName, 'First Stage');
+  assert.ok(s.entries.some((e) => e.team.id === HOME));
+  assert.equal(selectStandingsStage(data.children).name, 'First Stage');
+});
+
+test('normalizeStandings returns null when no stage has entries', () => {
+  assert.equal(normalizeStandings({ children: [] }), null);
+  assert.equal(normalizeStandings({}), null);
+  assert.equal(selectStandingsStage([]), null);
+});
+
+test('planStandingsPost defers while the ESPN table still lags the posted result', () => {
+  const state = {};
+  const table = tableWithLduAt(6);
+  table.entries.forEach((e) => { e.played = 19; }); // table not yet caught up
+  // We have seen 20 completed LigaPro matches, table only shows 19 → stale.
+  assert.equal(planStandingsPost(table, state, true, 20), false);
+  assert.equal(state.standings, undefined, 'must not record a deferred (stale) table');
+  // Table catches up to the 20th match → now it may post.
+  table.entries.forEach((e) => { e.played = 20; });
+  assert.equal(planStandingsPost(table, state, true, 20), true);
 });
 
 test('planStandingsPost posts once per table state, only after a result', () => {
