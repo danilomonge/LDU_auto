@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "eventId": "401859631",
+    "type": "result",
+    "file": "2026-07-23_401859631_result.png",
+    "caption": "⚪️🔴 Empate. Manta F.C. 1 - 1 LDU\nLIGAPRO · SERIE A\n⚽️ Estrada 42'\n🏟️ Estadio Jocay\n\nFalta afinar detalles, Liga.\n\n#LDU #LigaDeQuito #LigaPro #SerieA #FutbolEcuatoriano",
+    "matchDate": "2026-07-23T00:00Z",
+    "createdAt": "2026-07-23T05:15:14.171Z"
+  },
+  {
+    "eventId": "tabla-f21",
+    "type": "standings",
+    "file": "2026-07-23_tabla-f21_standings.png",
+    "caption": "⚪️🔴 Así está la tabla de la LigaPro tras la fecha 21.\n📊 LDU: 6.º con 29 puntos (21 PJ, +3 DG).\n🔝 Líder: Ind. del Valle con 52 puntos.\n\nLa tabla se pelea con garra alba.\n\n#LDU #LigaDeQuito #LigaPro #SerieA #TablaDePosiciones #FutbolEcuatoriano",
+    "matchDate": null,
+    "createdAt": "2026-07-23T05:15:15.973Z"
+  }
+]
