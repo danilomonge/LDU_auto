@@ -115,7 +115,18 @@ export function planPosts(matches, state, now = new Date()) {
   //    real wall-clock margin since the last result POSTED (not kickoff),
   //    giving that post room to actually land — retries, workflow delays,
   //    Graph API hiccups — before the feed moves on to the next fixture.
-  const FIXTURE_MARGIN_MS = 2 * 60 * 60 * 1000;
+  //
+  // The margin is a full day: back-to-back cards ("final del partido" then
+  // "próximo partido" an hour later) read as a burst, and the next-match
+  // announcement carries further when it has the feed to itself.
+  const FIXTURE_MARGIN_MS = 24 * 60 * 60 * 1000;
+  // …but spacing must never cost us the announcement altogether. Fixtures
+  // land inside the 24h window all the time (a Sunday result before a
+  // Wednesday cup tie is fine; a Saturday result before a Sunday match is
+  // not), and waiting the margin out there would announce the match after it
+  // had already kicked off. Inside this lead time the fixture goes out
+  // regardless of how recently the result did.
+  const KICKOFF_LEAD_MS = 12 * 60 * 60 * 1000;
   const hasLiveMatch = matches.some((m) => m.state === 'in');
   const resultRecentlyPosted = Object.values(state.results).some(
     (r) => r.posted && r.postedAt && now - new Date(r.postedAt) < FIXTURE_MARGIN_MS
@@ -128,9 +139,15 @@ export function planPosts(matches, state, now = new Date()) {
       now - new Date(m.date) <= MAX_RESULT_AGE_MS &&
       !hasSettledScore(m)
   );
-  const nextFixture = (hasLiveMatch || resultRecentlyPosted || hasUnsettledResult) ? undefined : matches
+  const upcoming = matches
     .filter((m) => m.state === 'pre' && new Date(m.date) > now)
     .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+  // Only the spacing yields to an imminent kickoff. The live-match and
+  // unsettled-score guards stay absolute: those exist to keep the feed from
+  // talking over a match still being played, which no deadline justifies.
+  const kickoffImminent = upcoming && new Date(upcoming.date) - now <= KICKOFF_LEAD_MS;
+  const held = hasLiveMatch || hasUnsettledResult || (resultRecentlyPosted && !kickoffImminent);
+  const nextFixture = held ? undefined : upcoming;
 
   if (nextFixture) {
     const fp = fingerprint(nextFixture);

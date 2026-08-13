@@ -27,11 +27,11 @@ test('first run: posts next fixture + latest result only, baselines the rest', (
     match('later', '2026-07-20T00:00Z'),
   ];
   const { posts, state } = planPosts(matches, null, NOW);
-  // fixture:next is withheld by the 2h post-result margin, same as any run.
+  // fixture:next is withheld by the 24h post-result margin, same as any run.
   assert.deepEqual(posts.map((p) => `${p.type}:${p.match.id}`), ['result:old2']);
   assert.ok(state.results.old1.baselined);
 
-  const later = new Date(NOW.getTime() + 3 * 60 * 60 * 1000);
+  const later = new Date(NOW.getTime() + 25 * 60 * 60 * 1000);
   const { posts: posts2 } = planPosts(matches, state, later);
   assert.deepEqual(posts2.map((p) => `${p.type}:${p.match.id}`), ['fixture:next']);
 });
@@ -181,17 +181,18 @@ test('lifecycle: league + cup interleave without duplicate or missing posts', ()
   };
   st = run([copaDone, liga12, liga15], st, '2026-07-10T03:30Z');
   // Sun: league match finished → result posts; Wednesday's fixture is held
-  // back by the 2h post-result margin.
+  // back by the 24h post-result margin.
   const liga12Done = {
     ...liga12, state: 'post', completed: true,
     home: { ...liga12.home, score: '2', winner: true },
     away: { ...liga12.away, score: '0', winner: false },
   };
   st = run([copaDone, liga12Done, liga15], st, '2026-07-12T19:10Z');
-  // Still within the margin → silent.
-  st = run([copaDone, liga12Done, liga15], st, '2026-07-12T20:10Z');
-  // 2h+ after the result → Wednesday finally announced.
+  // Still within the margin → silent. (Wednesday is far enough out that the
+  // imminent-kickoff override doesn't apply.)
   st = run([copaDone, liga12Done, liga15], st, '2026-07-12T21:15Z');
+  // 24h+ after the result → Wednesday finally announced.
+  st = run([copaDone, liga12Done, liga15], st, '2026-07-13T20:00Z');
 
   assert.deepEqual(seq, [
     'fixture:liga12',
@@ -228,7 +229,7 @@ test('next fixture is not announced while an LDU match is live', () => {
   };
   const afterMatch = new Date('2026-07-12T19:10:00Z');
   const { posts: posts2 } = planPosts([liga12Done, liga15], s2, afterMatch);
-  // fixture:liga15 is withheld too, by the 2h post-result margin — see the
+  // fixture:liga15 is withheld too, by the 24h post-result margin — see the
   // dedicated margin test below.
   assert.deepEqual(posts2.map((p) => `${p.type}:${p.match.id}`), ['result:liga12']);
 });
@@ -238,7 +239,7 @@ test('next fixture is not announced while an LDU match is live', () => {
 // the 'in' window), so the fixture announcement also needs a real wall-clock
 // buffer after the result post — giving that post room to actually land
 // (retries, workflow delays, Graph API hiccups) before the feed moves on.
-test('next fixture waits at least 2 hours after a result posts, even in the same run', () => {
+test('next fixture waits ~24 hours after a result posts, even in the same run', () => {
   const pre = [match('m1', '2026-07-07T00:00Z'), match('m2', '2026-07-12T00:00Z')];
   const { state: s1 } = planPosts(pre, null, NOW);
   const after = [
@@ -250,15 +251,59 @@ test('next fixture waits at least 2 hours after a result posts, even in the same
   const r = planPosts(after, s1, justAfter);
   assert.deepEqual(r.posts.map((p) => `${p.type}:${p.match.id}`), ['result:m1']);
 
-  // Under 2h later → still held.
-  const soon = new Date('2026-07-07T03:30:00Z');
-  const r2 = planPosts(after, r.state, soon);
+  // A couple of hours later → still held; the next-match card no longer
+  // stacks straight on top of the result it followed.
+  const soon = new Date('2026-07-07T04:30:00Z');
+  assert.deepEqual(planPosts(after, r.state, soon).posts, []);
+
+  // Just short of 24h → still held.
+  const almost = new Date('2026-07-08T01:00:00Z');
+  const r2 = planPosts(after, r.state, almost);
   assert.deepEqual(r2.posts, []);
 
-  // 2h+ after the result posted → the fixture finally goes out.
-  const later = new Date('2026-07-07T04:30:00Z');
+  // 24h+ after the result posted → the fixture finally goes out.
+  const later = new Date('2026-07-08T03:00:00Z');
   const r3 = planPosts(after, r2.state, later);
   assert.deepEqual(r3.posts.map((p) => `${p.type}:${p.match.id}`), ['fixture:m2']);
+});
+
+// The 24h spacing is about how the feed reads, not about withholding a match
+// nobody has been told about yet. When the next kickoff falls inside that
+// window, waiting it out would announce the match after it has been played —
+// so an imminent kickoff wins over the spacing.
+test('an imminent kickoff overrides the 24h post-result margin', () => {
+  const pre = [match('m1', '2026-07-07T00:00Z'), match('m2', '2026-07-07T22:00Z')];
+  const { state: s1 } = planPosts(pre, null, NOW);
+  const after = [
+    match('m1', '2026-07-07T00:00Z', { state: 'post', completed: true, hs: '3', as: '1', hWin: true }),
+    match('m2', '2026-07-07T22:00Z'),
+  ];
+
+  // Result posts at 02:00, m2 kicks off at 22:00 the same day — only 20h
+  // apart, so the plain 24h rule would never get the fixture out.
+  const justAfter = new Date('2026-07-07T02:00:00Z');
+  const r = planPosts(after, s1, justAfter);
+  assert.deepEqual(r.posts.map((p) => `${p.type}:${p.match.id}`), ['result:m1']);
+
+  // Kickoff still more than 12h out → the spacing holds.
+  const morning = new Date('2026-07-07T06:00:00Z');
+  const r2 = planPosts(after, r.state, morning);
+  assert.deepEqual(r2.posts, []);
+
+  // Inside 12h of kickoff → announced despite being well under 24h.
+  const matchday = new Date('2026-07-07T16:00:00Z');
+  const r3 = planPosts(after, r2.state, matchday);
+  assert.deepEqual(r3.posts.map((p) => `${p.type}:${p.match.id}`), ['fixture:m2']);
+});
+
+// The override must not reopen the gaps the margin exists to close: a match in
+// progress still holds the pointer, however close the following kickoff is.
+test('an imminent kickoff does not override the live-match guard', () => {
+  const live = [
+    match('m1', '2026-07-07T00:00Z', { state: 'in' }),
+    match('m2', '2026-07-07T06:00Z'),
+  ];
+  assert.deepEqual(planPosts(live, {}, new Date('2026-07-07T01:00:00Z')).posts, []);
 });
 
 // Defense in depth for the "Empate cuando fue derrota" incident: ESPN can flip
