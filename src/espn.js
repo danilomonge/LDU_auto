@@ -3,7 +3,10 @@
 
 import { TEAM_ID, LEAGUES, classifyCompetition, HOME_VENUE } from './config.js';
 
-const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
+// Host note: site.api.espn.com started returning Akamai "Access Denied" (403)
+// for every request on 2026-08-04, which silently zeroed out every fetch.
+// site.web.api.espn.com serves the identical paths and payloads unblocked.
+const BASE = 'https://site.web.api.espn.com/apis/site/v2/sports/soccer';
 
 async function fetchJson(url) {
   const res = await fetch(url, { headers: { 'User-Agent': 'ldu-post-bot/1.0' } });
@@ -199,7 +202,7 @@ export async function fetchMatchExtras(match) {
 
 // --- League standings (LigaPro) --------------------------------------------
 
-const STANDINGS_URL = 'https://site.api.espn.com/apis/v2/sports/soccer/ecu.1/standings';
+const STANDINGS_URL = 'https://site.web.api.espn.com/apis/v2/sports/soccer/ecu.1/standings';
 
 /**
  * Choose which stage/group table to read from a standings payload. LigaPro

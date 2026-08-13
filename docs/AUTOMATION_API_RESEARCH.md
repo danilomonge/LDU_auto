@@ -30,8 +30,14 @@ contexto: tabla, racha, incidencias, previa, resumen y monitoreo de noticias.
 Base usada por el repo:
 
 ```txt
-https://site.api.espn.com/apis/site/v2/sports/soccer
+https://site.web.api.espn.com/apis/site/v2/sports/soccer
 ```
+
+Actualizacion 2026-08-13: el host `site.api.espn.com` empezo a responder 403
+"Access Denied" (Akamai) a todo el trafico el 2026-08-04, lo que dejo cada
+fetch en cero sin hacer fallar el workflow. `site.web.api.espn.com` sirve las
+mismas rutas y el mismo payload sin bloqueo; las URLs de abajo se conservan
+con el host viejo como registro de la prueba original.
 
 Endpoints probados con IDs reales de LDU:
 
