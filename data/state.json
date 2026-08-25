@@ -227,6 +227,11 @@
       "fingerprint": "pre|||2026-08-20T22:00Z",
       "name": "LDU vs Mirassol",
       "date": "2026-08-20T22:00Z"
+    },
+    "tsdb-2580552": {
+      "fingerprint": "pre|||2026-08-26T22:00:00Z",
+      "name": "LDU vs Aucas",
+      "date": "2026-08-26T22:00:00Z"
     }
   },
   "standings": {
