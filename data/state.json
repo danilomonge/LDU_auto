@@ -188,11 +188,6 @@
     }
   },
   "fixtures": {
-    "401859634": {
-      "fingerprint": "pre|||2026-07-27T00:15Z",
-      "name": "Barcelona vs LDU",
-      "date": "2026-07-27T00:15Z"
-    },
     "401859640": {
       "fingerprint": "pre|||2026-08-04T00:00Z",
       "name": "LDU vs Delfín",
