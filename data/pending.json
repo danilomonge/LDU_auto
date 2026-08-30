@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "eventId": "401859673",
+    "type": "result",
+    "file": "2026-08-29_401859673_result.png",
+    "caption": "⚪️🔴 Liga cayó. Guayaquil 2 - 1 LDU\nLIGAPRO · SERIE A\n⚽️ Quiñonez 39'\n🏟️ Estadio Christian Benítez Betancourt\n\nYa vendrá la alegría de nuevo con Liga.\n\n#LDU #LigaDeQuito #LigaPro #SerieA #FutbolEcuatoriano",
+    "matchDate": "2026-08-29T21:00Z",
+    "createdAt": "2026-08-30T06:03:46.447Z"
+  },
+  {
+    "eventId": "tabla-f27",
+    "type": "standings",
+    "file": "2026-08-30_tabla-f27_standings.png",
+    "caption": "⚪️🔴 Así está la tabla de la LigaPro tras la fecha 27.\n📊 LDU: 5.º con 41 puntos (27 PJ, +5 DG).\n🔝 Líder: Ind. del Valle con 68 puntos.\n\nPartido a partido con la U.\n\n#LDU #LigaDeQuito #LigaPro #SerieA #TablaDePosiciones #FutbolEcuatoriano",
+    "matchDate": null,
+    "createdAt": "2026-08-30T06:03:47.667Z"
+  }
+]
