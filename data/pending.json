@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "eventId": "401859678",
+    "type": "result",
+    "file": "2026-09-02_401859678_result.png",
+    "caption": "⚪️🔴 Empate. LDU 0 - 0 Mushuc Runa\nLIGAPRO · SERIE A\n🏟️ Estadio Rodrigo Paz Delgado\n\nLiga tiene con qué dar más.\n\n#LDU #LigaDeQuito #LigaPro #SerieA #FutbolEcuatoriano",
+    "matchDate": "2026-09-02T00:00Z",
+    "createdAt": "2026-09-02T06:35:58.464Z"
+  },
+  {
+    "eventId": "tabla-f28",
+    "type": "standings",
+    "file": "2026-09-02_tabla-f28_standings.png",
+    "caption": "⚪️🔴 Así está la tabla de la LigaPro tras la fecha 28.\n📊 LDU: 5.º con 42 puntos (28 PJ, +5 DG).\n🔝 Líder: Ind. del Valle con 68 puntos.\n\nA seguir sumando, Liga.\n\n#LDU #LigaDeQuito #LigaPro #SerieA #TablaDePosiciones #FutbolEcuatoriano",
+    "matchDate": null,
+    "createdAt": "2026-09-02T06:35:59.771Z"
+  }
+]
