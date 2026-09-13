@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "eventId": "401859691",
+    "type": "result",
+    "file": "2026-09-13_401859691_result.png",
+    "caption": "⚪️🔴 Empate. LDU 1 - 1 Cuenca\nLIGAPRO · SERIE A\n⚽️ Deyverson (P) 52'\n🏟️ Estadio Rodrigo Paz Delgado\n\nEmpate en la cancha; en el aliento ganó Liga.\n\n#LDU #LigaDeQuito #LigaPro #SerieA #FutbolEcuatoriano",
+    "matchDate": "2026-09-13T00:00Z",
+    "createdAt": "2026-09-13T06:57:53.799Z"
+  },
+  {
+    "eventId": "tabla-f30",
+    "type": "standings",
+    "file": "2026-09-13_tabla-f30_standings.png",
+    "caption": "⚪️🔴 Así está la tabla de la LigaPro tras la fecha 30.\n📊 LDU: 5.º con 46 puntos (30 PJ, +7 DG).\n🔝 Líder: Ind. del Valle con 71 puntos.\n\nLa U nunca deja de pelear.\n\n#LDU #LigaDeQuito #LigaPro #SerieA #TablaDePosiciones #FutbolEcuatoriano",
+    "matchDate": null,
+    "createdAt": "2026-09-13T06:57:55.029Z"
+  }
+]
