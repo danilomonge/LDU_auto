@@ -281,6 +281,11 @@
       "fingerprint": "pre|||2026-08-26T22:00:00Z",
       "name": "LDU vs Aucas",
       "date": "2026-08-26T22:00:00Z"
+    },
+    "tsdb-2605652": {
+      "fingerprint": "pre|||2026-10-07T20:00:00Z",
+      "name": "Universidad Católica del Ecuador vs LDU",
+      "date": "2026-10-07T20:00:00Z"
     }
   },
   "standings": {
