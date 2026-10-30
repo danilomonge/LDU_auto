@@ -262,6 +262,13 @@
       "postedAt": "2026-08-27T02:23:08.156Z",
       "score": "1-0",
       "name": "LDU vs Aucas"
+    },
+    "tsdb-2605652": {
+      "posted": true,
+      "date": "2026-10-30T00:00:00Z",
+      "postedAt": "2026-10-30T02:16:06.697Z",
+      "score": "2-2",
+      "name": "Universidad Católica del Ecuador vs LDU"
     }
   },
   "fixtures": {
