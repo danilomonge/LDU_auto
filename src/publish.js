@@ -38,6 +38,7 @@ function imageBaseUrl() {
 function graphError(json) {
   const err = new Error(`Graph API error: ${JSON.stringify(json.error || json)}`);
   err.graphCode = json.error?.code;
+  err.isGraphError = true; // Graph answered (vs. network/parse failure)
   return err;
 }
 
@@ -127,7 +128,13 @@ export function configuredAccounts() {
 const FB_GRAPH = 'https://graph.facebook.com/v23.0';
 const pageTokenCache = new Map();
 
-const tryGraphGet = (url, params) => graphGet(url, params).catch(() => null);
+// A Graph error answer just means "this path doesn't work for this token";
+// network failures are rethrown so an outage isn't mistaken for a bad token.
+const tryGraphGet = (url, params) =>
+  graphGet(url, params).catch((err) => {
+    if (err.isGraphError) return null;
+    throw err;
+  });
 
 export async function resolvePageToken(pageId, token) {
   const key = `${pageId}:${token}`;

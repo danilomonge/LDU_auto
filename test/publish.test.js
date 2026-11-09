@@ -150,6 +150,21 @@ test('a user token that yields no page token fails loudly as an auth error', asy
   );
 });
 
+// A network outage is transient, not a token problem: surface it as-is so
+// the run fails with the real error and the token chain is not walked.
+test('a network failure during page-token lookup is not reported as an auth error', async () => {
+  await withFetch(
+    () => Promise.reject(new TypeError('fetch failed')),
+    async () => {
+      await assert.rejects(resolvePageToken('999', 'EAAuser-offline'), (err) => {
+        assert.equal(err.message, 'fetch failed');
+        assert.equal(isAuthError(err), false);
+        return true;
+      });
+    }
+  );
+});
+
 test('a failed resolution is retried, not cached', async () => {
   let pageNode = { id: '888' };
   await withFetch(
