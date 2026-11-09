@@ -79,11 +79,100 @@ test('a user token is swapped for the page token before posting to the page', as
   );
 });
 
-test('a token that cannot list pages is used as-is (already a page token)', async () => {
+// Routes mocked Graph GETs by path: { '/me/accounts': body, '/me': body,
+// '/<pageId>': body }. A body with `error` is served as a failed response.
+function graphRouter(routes) {
+  return (url) => {
+    const path = new URL(url).pathname.replace(/^\/v[\d.]+/, '');
+    const body = routes[path] ?? { error: { message: `unmocked ${path}`, type: 'OAuthException', code: 100 } };
+    return jsonResponse(body, !body.error);
+  };
+}
+
+// Production failure 2026-10-28: once the user token's 90-day data-access
+// window lapsed, Meta started answering /me/accounts with an EMPTY list (HTTP
+// 200, no error) — yet the page node still hands out its page token.
+test('the page token comes from the page node when /me/accounts is empty', async () => {
   await withFetch(
-    () => jsonResponse({ error: { message: 'impersonation…', type: 'OAuthException', code: 190 } }, false),
+    graphRouter({
+      '/me/accounts': { data: [] },
+      '/444': { id: '444', access_token: 'EAApage-node' },
+      '/me': { id: '9999', name: 'Some User' },
+    }),
     async () => {
-      assert.equal(await resolvePageToken('222', 'EAApage-asis'), 'EAApage-asis');
+      assert.equal(await resolvePageToken('444', 'EAAuser-node'), 'EAApage-node');
+    }
+  );
+});
+
+test('/me/accounts still resolves the page token when the page node gives none', async () => {
+  await withFetch(
+    graphRouter({
+      '/555': { id: '555' }, // no access_token field
+      '/me/accounts': { data: [{ id: '555', access_token: 'EAApage-list' }] },
+    }),
+    async () => {
+      assert.equal(await resolvePageToken('555', 'EAAuser-list'), 'EAApage-list');
+    }
+  );
+});
+
+test("a token that IS the page's own token is used as-is", async () => {
+  await withFetch(
+    graphRouter({
+      '/me/accounts': { error: { message: 'impersonation…', type: 'OAuthException', code: 190 } },
+      '/666': { id: '666' },
+      '/me': { id: '666', name: 'The Page' },
+    }),
+    async () => {
+      assert.equal(await resolvePageToken('666', 'EAApage-asis'), 'EAApage-asis');
+    }
+  );
+});
+
+// Posting to a page with a USER token fails with Meta's misleading
+// "(#200) publish_actions deprecated" — never do it; fail with the real cause.
+test('a user token that yields no page token fails loudly as an auth error', async () => {
+  await withFetch(
+    graphRouter({
+      '/me/accounts': { data: [] },
+      '/777': { id: '777' },
+      '/me': { id: '9999', name: 'Some User' },
+    }),
+    async () => {
+      await assert.rejects(resolvePageToken('777', 'EAAuser-none'), (err) => {
+        assert.equal(isAuthError(err), true);
+        assert.match(err.message, /page access token/i);
+        assert.match(err.message, /777/);
+        return true;
+      });
+    }
+  );
+});
+
+// A network outage is transient, not a token problem: surface it as-is so
+// the run fails with the real error and the token chain is not walked.
+test('a network failure during page-token lookup is not reported as an auth error', async () => {
+  await withFetch(
+    () => Promise.reject(new TypeError('fetch failed')),
+    async () => {
+      await assert.rejects(resolvePageToken('999', 'EAAuser-offline'), (err) => {
+        assert.equal(err.message, 'fetch failed');
+        assert.equal(isAuthError(err), false);
+        return true;
+      });
+    }
+  );
+});
+
+test('a failed resolution is retried, not cached', async () => {
+  let pageNode = { id: '888' };
+  await withFetch(
+    (url) => graphRouter({ '/me/accounts': { data: [] }, '/888': pageNode, '/me': { id: '1' } })(url),
+    async () => {
+      await assert.rejects(resolvePageToken('888', 'EAAuser-retry'));
+      pageNode = { id: '888', access_token: 'EAApage-later' };
+      assert.equal(await resolvePageToken('888', 'EAAuser-retry'), 'EAApage-later');
     }
   );
 });
@@ -96,9 +185,10 @@ test('page-token resolution is cached per token', async () => {
       return jsonResponse({ data: [{ id: '333', access_token: 'EAApageC' }] });
     },
     async () => {
-      await resolvePageToken('333', 'EAAuser-cache');
-      await resolvePageToken('333', 'EAAuser-cache');
-      assert.equal(calls, 1);
+      assert.equal(await resolvePageToken('333', 'EAAuser-cache'), 'EAApageC');
+      const afterFirst = calls;
+      assert.equal(await resolvePageToken('333', 'EAAuser-cache'), 'EAApageC');
+      assert.equal(calls, afterFirst); // second lookup never hits the network
     }
   );
 });
