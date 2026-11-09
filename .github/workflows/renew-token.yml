@@ -91,8 +91,11 @@ jobs:
             fi
             echo "::add-mask::$NU"
             # …and derive a fresh page token from it.
+            # Page node first: /me/accounts can come back EMPTY once the user
+            # token's 90-day data-access window lapses (see src/publish.js).
+            NEW=$(curl -s "$GRAPH/${FACEBOOK_USER_ID}?fields=id,access_token&access_token=${NU}" | jq -r '.access_token // empty')
             ACCTS=$(curl -s "$GRAPH/me/accounts?fields=id,access_token&access_token=${NU}")
-            NEW=$(printf %s "$ACCTS" | jq -r --arg id "${FACEBOOK_USER_ID:-}" '.data[]? | select(.id==$id) | .access_token // empty')
+            [ -n "$NEW" ] || NEW=$(printf %s "$ACCTS" | jq -r --arg id "${FACEBOOK_USER_ID:-}" '.data[]? | select(.id==$id) | .access_token // empty')
             if [ -z "$NEW" ]; then
               echo "Meta says: $(printf %s "$ACCTS" | jq -c 'if .error then .error | {message, type, code} else {pages_visible: [.data[]?.id]} end' 2>/dev/null || echo unparseable)"
               echo "::error::Could not derive a page token for FACEBOOK_USER_ID from the refreshed user token."
