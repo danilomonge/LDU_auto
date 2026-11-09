@@ -1,0 +1,50 @@
+name: LDU match watch
+
+# Timer half of the match-day watch (see src/watch.js): dispatched by the last
+# step of ldu-posts.yml around an LDU match, it sleeps for the requested delay
+# and then runs the posts workflow again. That run decides whether to dispatch
+# another wake-up, so the chain stops on its own once the match is fully
+# posted or its watch window closes. Never scheduled.
+
+on:
+  workflow_dispatch:
+    inputs:
+      delay:
+        description: Seconds to wait before running the LDU posts workflow
+        required: true
+        default: '900'
+
+# A single timer: a newer wake-up (computed from fresher state) replaces a
+# sleeping one, so the chain never forks into parallel runs.
+concurrency:
+  group: ldu-wakeup
+  cancel-in-progress: true
+
+permissions:
+  actions: write # dispatch ldu-posts.yml
+
+jobs:
+  wake:
+    runs-on: ubuntu-24.04
+    # src/watch.js caps a single sleep at 5.5h, under GitHub's 6h job limit.
+    timeout-minutes: 345
+    steps:
+      - name: Sleep until the next check
+        env:
+          DELAY: ${{ inputs.delay }}
+        run: |
+          case "$DELAY" in ''|*[!0-9]*) echo "::error::delay must be whole seconds, got '$DELAY'"; exit 1;; esac
+          [ "$DELAY" -le 19800 ] || DELAY=19800
+          echo "Sleeping ${DELAY}s (until $(date -u -d "+${DELAY} seconds" +'%H:%M UTC'))"
+          sleep "$DELAY"
+
+      - name: Run the LDU posts workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in 1 2 3; do
+            gh workflow run ldu-posts.yml --repo "$GITHUB_REPOSITORY" --ref main && exit 0
+            sleep 20
+          done
+          echo "::error::Could not dispatch ldu-posts.yml"
+          exit 1

@@ -198,6 +198,9 @@ export function standingsFingerprint(standings) {
     .join('|');
 }
 
+// How long a deferred table stays owed (see planStandingsPost).
+const STANDINGS_OWED_MS = 3 * 24 * 60 * 60 * 1000;
+
 /**
  * Decide whether to post the league table. Posted only right after an LDU
  * LigaPro result went out (the natural "tabla tras la fecha" moment) and only
@@ -208,17 +211,29 @@ export function standingsFingerprint(standings) {
  * feed) guards against ESPN's aggregated table lagging the match that just
  * finished: if the fetched table shows FEWER LDU games than that, it hasn't
  * absorbed the result yet, so posting it would put out a "tabla desactualizada"
- * with the wrong fecha and points. In that case we defer — a later run posts
- * it once ESPN catches up. Passing null skips the check.
+ * with the wrong fecha and points. In that case — or when the table can't be
+ * fetched at all — we defer: state.standingsOwedSince marks the table as owed,
+ * so later runs (which have no fresh result) keep retrying until ESPN catches
+ * up, for at most STANDINGS_OWED_MS. Passing null skips the check.
  *
  * Mutates state; returns true when a standings post should be generated.
  */
-export function planStandingsPost(standings, state, resultJustPosted, expectedPlayed = null) {
-  if (!standings || !resultJustPosted) return false;
+export function planStandingsPost(standings, state, resultJustPosted, expectedPlayed = null, now = new Date()) {
+  // Past the limit the next fecha's result brings a fresh table anyway.
+  if (state.standingsOwedSince && !(now - new Date(state.standingsOwedSince) < STANDINGS_OWED_MS)) {
+    delete state.standingsOwedSince;
+  }
+  if (!resultJustPosted && !state.standingsOwedSince) return false;
+  const defer = () => {
+    state.standingsOwedSince ||= now.toISOString();
+    return false;
+  };
+  if (!standings) return defer();
   if (expectedPlayed != null) {
     const ldu = standings.entries.find((e) => e.team.id === TEAM_ID);
-    if (ldu && ldu.played != null && ldu.played < expectedPlayed) return false;
+    if (ldu && ldu.played != null && ldu.played < expectedPlayed) return defer();
   }
+  delete state.standingsOwedSince;
   const fp = standingsFingerprint(standings);
   if (state.standings?.fingerprint === fp) return false;
   state.standings = { fingerprint: fp };

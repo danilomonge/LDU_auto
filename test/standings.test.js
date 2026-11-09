@@ -176,6 +176,42 @@ test('planStandingsPost defers while the ESPN table still lags the posted result
   assert.equal(planStandingsPost(table, state, true, 20), true);
 });
 
+// In production the run that posts the result is the only one that calls
+// with resultJustPosted=true — a deferral must be remembered in state, or the
+// "tabla tras la fecha" is silently lost whenever ESPN's table lags.
+test('a deferred table stays owed and posts on a later run without a new result', () => {
+  const t0 = new Date('2026-11-09T00:00Z');
+  const t1 = new Date('2026-11-09T00:30Z');
+  const state = {};
+  const table = tableWithLduAt(6);
+  table.entries.forEach((e) => { e.played = 19; });
+  assert.equal(planStandingsPost(table, state, true, 20, t0), false);
+  assert.equal(state.standingsOwedSince, t0.toISOString());
+  // Still lagging on the next run: still owed, state untouched.
+  assert.equal(planStandingsPost(table, state, false, 20, t1), false);
+  assert.equal(state.standingsOwedSince, t0.toISOString());
+  // ESPN catches up: the owed table goes out and the debt is cleared.
+  table.entries.forEach((e) => { e.played = 20; });
+  assert.equal(planStandingsPost(table, state, false, 20, t1), true);
+  assert.equal(state.standingsOwedSince, undefined);
+  assert.equal(state.standings.fingerprint, standingsFingerprint(table));
+});
+
+test('an unavailable table (ESPN down) is owed too', () => {
+  const now = new Date('2026-11-09T00:00Z');
+  const state = {};
+  assert.equal(planStandingsPost(null, state, true, 20, now), false);
+  assert.equal(state.standingsOwedSince, now.toISOString());
+  assert.equal(planStandingsPost(tableWithLduAt(4), state, false, null, now), true);
+});
+
+test('an owed table expires instead of posting days late', () => {
+  const state = { standingsOwedSince: '2026-11-01T00:00:00.000Z' };
+  assert.equal(planStandingsPost(tableWithLduAt(4), state, false, null, new Date('2026-11-05T00:00Z')), false);
+  assert.equal(state.standingsOwedSince, undefined);
+  assert.equal(state.standings, undefined);
+});
+
 test('planStandingsPost posts once per table state, only after a result', () => {
   const standings = tableWithLduAt(3);
   const state = {};

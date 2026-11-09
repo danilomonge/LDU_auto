@@ -3,6 +3,7 @@
 //   node src/index.js generate   fetch ESPN → detect changes → render posts
 //   node src/index.js publish    publish pending posts to Instagram
 //   node src/index.js cleanup    delete rendered posts older than 30 days
+//   node src/index.js watch      seconds until the next run (match-day watch)
 //   node src/index.js samples    render demo posts, edge cases and standings
 //
 // `generate` writes PNGs + captions to output/posts/ and queues them in
@@ -25,6 +26,7 @@ import { publishPending, diagnose } from './publish.js';
 import { PATHS, TEAM_ID } from './config.js';
 import { buildSampleMatches } from './samples.js';
 import { pruneOldPosts } from './cleanup.js';
+import { nextCheckDelay } from './watch.js';
 
 async function renderPost(match, type, outDir, extras = null) {
   const dark = true;
@@ -90,7 +92,7 @@ async function generate() {
   }
 
   const { posts, state } = planPosts(matches, loadState());
-  if (posts.length === 0) {
+  if (posts.length === 0 && !state.standingsOwedSince) {
     console.log('No new posts needed — state unchanged.');
     saveState(state);
     return;
@@ -118,10 +120,11 @@ async function generate() {
   }
 
   // A LigaPro result just went out → follow it with the updated table, once.
+  // A table deferred on an earlier run (ESPN lagging) is retried until it lands.
   const ligaproResultPosted = posts.some(
     (p) => p.type === 'result' && p.match.competitionType === 'ligapro'
   );
-  if (ligaproResultPosted) {
+  if (ligaproResultPosted || state.standingsOwedSince) {
     const standings = await fetchStandings();
     // LDU's completed LigaPro games we can already see (the ecu.1 team schedule
     // IS LDU's LigaPro fixtures) — used to detect a table that hasn't yet
@@ -129,11 +132,13 @@ async function generate() {
     const expectedPlayed = matches.filter(
       (m) => m.competitionType === 'ligapro' && m.completed
     ).length;
-    if (planStandingsPost(standings, state, true, expectedPlayed)) {
+    if (planStandingsPost(standings, state, ligaproResultPosted, expectedPlayed)) {
       console.log('Rendering standings post: LigaPro table');
       const { eventId, file, caption } = await renderStandingsPost(standings, PATHS.outDir);
       queue(eventId, 'standings', file, caption);
       generated += 1;
+    } else if (state.standingsOwedSince) {
+      console.log(`LigaPro table not caught up yet — owed since ${state.standingsOwedSince}, retrying next run.`);
     }
   }
 
@@ -147,6 +152,18 @@ async function cleanup() {
   const removed = pruneOldPosts(PATHS.outDir, 30, new Date(), loadPending());
   if (removed.length === 0) console.log('Nothing to prune — no rendered posts older than 30 days.');
   else console.log(`Pruned ${removed.length} old file(s): ${removed.join(', ')}`);
+}
+
+// Prints the seconds until the next run should happen (empty when no LDU
+// match needs watching) for the workflow's follow-up step; logs go to stderr.
+function watch() {
+  const delay = nextCheckDelay(loadState(), loadPending());
+  if (delay === null) {
+    console.error('Match watch: no match near kickoff or awaiting posts — the cron covers it.');
+    return;
+  }
+  console.error(`Match watch: next check in ${Math.round(delay / 60)} min.`);
+  console.log(String(delay));
 }
 
 async function samples() {
@@ -171,6 +188,7 @@ try {
   if (mode === 'generate') await generate();
   else if (mode === 'publish') await publishPending();
   else if (mode === 'cleanup') await cleanup();
+  else if (mode === 'watch') watch();
   else if (mode === 'samples') await samples();
   else if (mode === 'diag') await diagnose(process.argv.includes('--deep'));
   else {
