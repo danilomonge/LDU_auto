@@ -29,7 +29,7 @@ competiciones).
    1080×1350 con Playwright/Chromium. Tema visual por competición.
 4. **Publicación** — Instagram Graph API oficial. Las imágenes se commitean al
    repo y se publican usando su URL pública `raw.githubusercontent.com`.
-5. **Automatización** — GitHub Actions corre cada hora
+5. **Automatización** — GitHub Actions corre dos veces por hora (min 17 y 47)
    ([.github/workflows/ldu-posts.yml](.github/workflows/ldu-posts.yml)).
 
 ## Uso local
