@@ -7,7 +7,9 @@ on:
     # finished game). GitHub sheds scheduled runs at the congested top of the
     # hour: on '0 * * * *' only ~4-5 of 24 daily runs fired from 2026-09 on
     # (≈21/day in August), so results went out hours late. Two odd minutes
-    # keep roughly hourly coverage even when one slot is dropped.
+    # keep roughly hourly coverage even when one slot is dropped. GitHub's
+    # delays are platform-wide, though, so around each LDU match the last
+    # step below takes over with its own short, bounded timer.
     - cron: '17,47 * * * *'
   workflow_dispatch: {}
 
@@ -17,6 +19,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write # the match-day watch dispatches ldu-wakeup.yml
 
 jobs:
   generate-and-publish:
@@ -103,4 +106,26 @@ jobs:
             git commit -m "publish: clear queue $(date -u +'%Y-%m-%d %H:%M') UTC"
             git pull --rebase origin main
             git push origin main
+          fi
+
+      - name: Match-day watch — schedule the next check
+        # GitHub fires scheduled runs only every ~4-9h lately (results went
+        # out up to 7.5h after the final whistle). From 12h before an LDU
+        # kickoff until its result, queue, and table are all out (at most 8h
+        # after kickoff), hand off to ldu-wakeup.yml, which sleeps and then
+        # re-runs this workflow. src/watch.js decides; outside that window
+        # nothing is dispatched and the cron alone drives the pipeline.
+        # Runs even after a failed step, so a transient error is retried soon.
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          delay=$(node src/index.js watch)
+          if [ -n "$delay" ]; then
+            for _ in 1 2 3; do
+              gh workflow run ldu-wakeup.yml --repo "$GITHUB_REPOSITORY" --ref main -f delay="$delay" && exit 0
+              sleep 20
+            done
+            echo "::error::Could not dispatch ldu-wakeup.yml; the cron will pick up the next check."
+            exit 1
           fi

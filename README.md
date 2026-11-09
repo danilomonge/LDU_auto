@@ -23,7 +23,9 @@ competiciones).
    posts si hay estado nuevo: un nuevo "próximo partido", un cambio de
    fecha/hora, o un partido recién finalizado. La tabla de posiciones se
    publica solo inmediatamente después de un resultado de LigaPro y solo si la
-   tabla cambió desde la última vez (fingerprint en el estado).
+   tabla cambió desde la última vez (fingerprint en el estado). Si ESPN aún no
+   actualizó la tabla, queda "debida" (`standingsOwedSince`) y se reintenta en
+   las corridas siguientes, hasta 3 días.
 3. **Render** — cada post es una plantilla HTML
    ([src/templates/post.js](src/templates/post.js)) renderizada a PNG
    1080×1350 con Playwright/Chromium. Tema visual por competición.
@@ -31,6 +33,13 @@ competiciones).
    repo y se publican usando su URL pública `raw.githubusercontent.com`.
 5. **Automatización** — GitHub Actions corre dos veces por hora (min 17 y 47)
    ([.github/workflows/ldu-posts.yml](.github/workflows/ldu-posts.yml)).
+   Como el cron de GitHub se atrasa horas, alrededor de cada partido entra la
+   **vigilancia de partido** ([src/watch.js](src/watch.js)): desde 12 h antes
+   del kickoff, el último paso dispara
+   [ldu-wakeup.yml](.github/workflows/ldu-wakeup.yml), que duerme hasta el
+   pitazo final esperado (~105 min tras el kickoff) y relanza el pipeline; luego
+   repite cada 15 min hasta que el resultado, su cola y la tabla estén
+   publicados, como máximo hasta 8 h después del kickoff.
 
 ## Uso local
 
