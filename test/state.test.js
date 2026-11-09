@@ -117,9 +117,11 @@ test('a previously announced fixture is re-announced only if rescheduled', () =>
   const cup = { ...match('cup', '2026-07-09T01:00Z'), competitionType: 'copaecuador' };
   const { state: s1 } = planPosts([league], null, NOW);
   const { state: s2 } = planPosts([cup, league], s1, NOW);
-  // While the cup match is still next, the league game gets moved.
+  // While the cup match is still next, the league game gets moved. Checked
+  // once the cup match is past its window: a vanished match with no result
+  // inside the window holds the pointer (see the vanished-match test).
   const moved = match('liga', '2026-07-13T00:00Z');
-  const after = new Date('2026-07-09T06:00:00Z');
+  const after = new Date('2026-07-10T08:00:00Z');
   const { posts } = planPosts([moved], s2, after);
   assert.deepEqual(posts.map((p) => `${p.type}:${p.match.id}`), ['fixture:liga']);
 });
@@ -304,6 +306,72 @@ test('an imminent kickoff does not override the live-match guard', () => {
     match('m2', '2026-07-07T06:00Z'),
   ];
   assert.deepEqual(planPosts(live, {}, new Date('2026-07-07T01:00:00Z')).posts, []);
+});
+
+// Production incident 2026-11-09: right after Barcelona 1-1 LDU ended, ESPN
+// had already dropped the match from the ?fixture=true list but not yet added
+// it to the results list. With the match in neither, none of the guards saw
+// it, and "próximo partido: LDU vs Aucas" went out BEFORE the 1-1 result.
+test('a match that vanished from the feed after kickoff holds the next fixture', () => {
+  const barca = match('barca', '2026-11-08T21:30Z');
+  const aucas = match('aucas', '2026-11-22T20:00Z');
+  const { posts: p0, state: s1 } = planPosts([barca, aucas], null, new Date('2026-11-07T12:00Z'));
+  assert.deepEqual(p0.map((p) => `${p.type}:${p.match.id}`), ['fixture:barca']);
+
+  // 00:05Z: Barcelona-LDU is in neither ESPN list → hold, don't announce Aucas.
+  const limbo = planPosts([aucas], s1, new Date('2026-11-09T00:05Z'));
+  assert.deepEqual(limbo.posts, []);
+
+  // 00:47Z: the result shows up → it posts, and Aucas waits the usual 24h.
+  const barcaDone = match('barca', '2026-11-08T21:30Z', { state: 'post', completed: true, hs: '1', as: '1' });
+  const r = planPosts([barcaDone, aucas], limbo.state, new Date('2026-11-09T00:47Z'));
+  assert.deepEqual(r.posts.map((p) => `${p.type}:${p.match.id}`), ['result:barca']);
+  const r2 = planPosts([barcaDone, aucas], r.state, new Date('2026-11-10T01:17Z'));
+  assert.deepEqual(r2.posts.map((p) => `${p.type}:${p.match.id}`), ['fixture:aucas']);
+});
+
+// Same gap from the other side: ESPN can lag flipping a match to 'in' at
+// kickoff (and TheSportsDB/date-only kickoffs sit at 00:00Z of match day), so
+// a past-kickoff match still listed 'pre' must hold the pointer too.
+test('a match still listed as upcoming after its kickoff holds the next fixture', () => {
+  const m1 = match('m1', '2026-07-07T00:00Z');
+  const m2 = match('m2', '2026-07-12T00:00Z');
+  const { state: s1 } = planPosts([m1, m2], null, NOW);
+  assert.deepEqual(planPosts([m1, m2], s1, new Date('2026-07-07T01:00Z')).posts, []);
+});
+
+// The overdue hold is a heuristic for missing data, so it must not cost the
+// next announcement: a postponed match that never reports a result stops
+// holding after the match window, and an imminent kickoff always wins.
+test('an overdue or vanished match stops holding after the window or for an imminent kickoff', () => {
+  const m1 = match('m1', '2026-07-07T00:00Z');
+  const far = match('far', '2026-07-20T00:00Z');
+  const { state: s1 } = planPosts([m1, far], null, NOW);
+  // Vanished for good (postponed, no new date) → released after the window.
+  assert.deepEqual(planPosts([far], s1, new Date('2026-07-07T20:00Z')).posts, []);
+  assert.deepEqual(
+    planPosts([far], s1, new Date('2026-07-08T07:00Z')).posts.map((p) => `${p.type}:${p.match.id}`),
+    ['fixture:far']
+  );
+  // Next kickoff inside 12h → announced even while m1 is unresolved.
+  const soon = match('soon', '2026-07-07T12:00Z');
+  assert.deepEqual(
+    planPosts([m1, soon], s1, new Date('2026-07-07T01:00Z')).posts.map((p) => `${p.type}:${p.match.id}`),
+    ['fixture:soon']
+  );
+});
+
+// TheSportsDB maps anything neither scheduled nor finished — postponed,
+// abandoned — to 'in'. Such an entry must not pass for a live match forever
+// and freeze every fixture announcement while the feed keeps listing it.
+test("a stale or future 'in' entry (postponed cup match) doesn't block fixtures", () => {
+  const next = match('next', '2026-07-15T00:00Z');
+  const stuck = match('stuck', '2026-07-01T00:00Z', { state: 'in' }); // 5 days ago
+  const postponed = match('pst', '2026-07-30T00:00Z', { state: 'in' }); // future date
+  for (const odd of [stuck, postponed]) {
+    const { posts } = planPosts([odd, next], {}, NOW);
+    assert.deepEqual(posts.map((p) => `${p.type}:${p.match.id}`), ['fixture:next'], odd.id);
+  }
 });
 
 // Defense in depth for the "Empate cuando fue derrota" incident: ESPN can flip
