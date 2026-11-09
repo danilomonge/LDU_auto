@@ -127,7 +127,30 @@ export function planPosts(matches, state, now = new Date()) {
   // had already kicked off. Inside this lead time the fixture goes out
   // regardless of how recently the result did.
   const KICKOFF_LEAD_MS = 12 * 60 * 60 * 1000;
-  const hasLiveMatch = matches.some((m) => m.state === 'in');
+  // How long after its listed kickoff a match can still be "in play" for the
+  // feed. A match resolves within hours, but date-only kickoffs (TheSportsDB
+  // 00:00Z, ESPN timeValid=false) can sit up to a day before the real one.
+  const MATCH_WINDOW_MS = 30 * 60 * 60 * 1000;
+  const inMatchWindow = (date) => {
+    const t = now - new Date(date);
+    return t >= 0 && t < MATCH_WINDOW_MS;
+  };
+  // Bounded by the window: TheSportsDB maps postponed/abandoned to 'in', and
+  // such an entry must not freeze fixture announcements for as long as the
+  // feed keeps listing it.
+  const hasLiveMatch = matches.some((m) => m.state === 'in' && inMatchWindow(m.date));
+  // A match past kickoff with no result recorded that the feed doesn't show
+  // as live or finished: still listed 'pre' (status lag; date-only kickoffs),
+  // or gone from both ESPN lists — right after the final whistle ESPN drops
+  // it from ?fixture=true before adding it to the results (2026-11-09:
+  // "próximo partido" went out before Barcelona 1-1 LDU). It holds the
+  // pointer like a live match — but, being a guess from missing data, it
+  // yields to an imminent kickoff like the spacing below does.
+  const listed = new Set(matches.map((m) => m.id));
+  const hasOverdueMatch = [
+    ...matches.filter((m) => m.state === 'pre').map((m) => [m.id, m.date]),
+    ...Object.entries(state.fixtures).filter(([id]) => !listed.has(id)).map(([id, f]) => [id, f.date]),
+  ].some(([id, date]) => !state.results[id] && inMatchWindow(date));
   const resultRecentlyPosted = Object.values(state.results).some(
     (r) => r.posted && r.postedAt && now - new Date(r.postedAt) < FIXTURE_MARGIN_MS
   );
@@ -146,7 +169,8 @@ export function planPosts(matches, state, now = new Date()) {
   // unsettled-score guards stay absolute: those exist to keep the feed from
   // talking over a match still being played, which no deadline justifies.
   const kickoffImminent = upcoming && new Date(upcoming.date) - now <= KICKOFF_LEAD_MS;
-  const held = hasLiveMatch || hasUnsettledResult || (resultRecentlyPosted && !kickoffImminent);
+  const held = hasLiveMatch || hasUnsettledResult ||
+    ((resultRecentlyPosted || hasOverdueMatch) && !kickoffImminent);
   const nextFixture = held ? undefined : upcoming;
 
   if (nextFixture) {
