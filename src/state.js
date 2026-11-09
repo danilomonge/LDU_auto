@@ -198,6 +198,9 @@ export function standingsFingerprint(standings) {
     .join('|');
 }
 
+// How long a deferred table stays owed (see planStandingsPost).
+const STANDINGS_OWED_MS = 3 * 24 * 60 * 60 * 1000;
+
 /**
  * Decide whether to post the league table. Posted only right after an LDU
  * LigaPro result went out (the natural "tabla tras la fecha" moment) and only
@@ -215,8 +218,6 @@ export function standingsFingerprint(standings) {
  *
  * Mutates state; returns true when a standings post should be generated.
  */
-const STANDINGS_OWED_MS = 3 * 24 * 60 * 60 * 1000;
-
 export function planStandingsPost(standings, state, resultJustPosted, expectedPlayed = null, now = new Date()) {
   // Past the limit the next fecha's result brings a fresh table anyway.
   if (state.standingsOwedSince && !(now - new Date(state.standingsOwedSince) < STANDINGS_OWED_MS)) {
