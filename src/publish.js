@@ -392,7 +392,7 @@ async function diagnoseAccount(userId, token, type = 'ig') {
       }
       if (!(pages.data || []).length) {
         console.log('  (none listed — missing pages_show_list, no page role, or a lapsed data-access window; ' +
-          'publishing only needs the "Page token" check above to pass)');
+          'page posts only need the [facebook] account\'s "Page token: OK")');
       }
     } catch (err) {
       console.log(`Could not list pages: ${err.message}`);
