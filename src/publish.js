@@ -44,7 +44,7 @@ function graphError(json) {
 // Token/permission failures (OAuth 190 & friends) — a different token may
 // still work; transient Graph hiccups would fail on any token.
 export function isAuthError(err) {
-  return err?.graphCode === 190 || /OAuthException/.test(err?.message || '');
+  return err?.authError === true || err?.graphCode === 190 || /OAuthException/.test(err?.message || '');
 }
 
 async function graphPost(url, params) {
@@ -114,27 +114,47 @@ export function configuredAccounts() {
 }
 
 // Page posts need a PAGE token, but the token chain often carries USER
-// tokens (posting to a page with one fails with "(#200) publish_actions").
-// Derive the page's own token via /me/accounts; a token that already IS a
-// page token can't list /me/accounts and falls through unchanged.
+// tokens — and posting to a page with a user token fails with Meta's
+// misleading "(#200) publish_actions deprecated". Ways to get the page token,
+// in order:
+//  1. the page node itself (GET /{page-id}?fields=access_token) — keeps
+//     working after the user token's 90-day data-access window lapses;
+//  2. the /me/accounts list — since 2026-10-28 it comes back EMPTY (HTTP 200,
+//     no error) for our lapsed token, which is what broke page publishing;
+//  3. the token may already BE the page's own token (/me answers as the page).
+// When none applies, fail with the real cause instead of posting with a user
+// token. Only successes are cached, so a failed lookup is retried.
+const FB_GRAPH = 'https://graph.facebook.com/v23.0';
 const pageTokenCache = new Map();
+
+const tryGraphGet = (url, params) => graphGet(url, params).catch(() => null);
+
 export async function resolvePageToken(pageId, token) {
   const key = `${pageId}:${token}`;
-  if (!pageTokenCache.has(key)) {
-    let resolved = token;
-    try {
-      const res = await graphGet('https://graph.facebook.com/v23.0/me/accounts', {
-        fields: 'id,access_token',
-        access_token: token,
-      });
-      const page = (res.data || []).find((p) => String(p.id) === String(pageId));
-      if (page?.access_token) resolved = page.access_token;
-    } catch {
-      // Not a user token (or no page access) — post with the token as-is.
-    }
-    pageTokenCache.set(key, resolved);
+  if (pageTokenCache.has(key)) return pageTokenCache.get(key);
+
+  const node = await tryGraphGet(`${FB_GRAPH}/${pageId}`, { fields: 'id,access_token', access_token: token });
+  let resolved = node?.access_token;
+  if (!resolved) {
+    const list = await tryGraphGet(`${FB_GRAPH}/me/accounts`, { fields: 'id,access_token', access_token: token });
+    resolved = (list?.data || []).find((p) => String(p.id) === String(pageId))?.access_token;
   }
-  return pageTokenCache.get(key);
+  if (!resolved) {
+    const me = await tryGraphGet(`${FB_GRAPH}/me`, { fields: 'id', access_token: token });
+    if (me && String(me.id) === String(pageId)) resolved = token;
+  }
+  if (!resolved) {
+    const err = new Error(
+      `Cannot obtain a Page access token for page ${pageId}: neither the page node nor /me/accounts ` +
+      'returned one, and the token is not the page\'s own token. Usual causes: the user lost their role ' +
+      'on the page, or the app\'s 90-day data access lapsed (run the credentials diagnostic). Fix: ' +
+      'regenerate a user token in the Graph API Explorer and update the IG_ACCESS_TOKEN secret.'
+    );
+    err.authError = true; // token-specific: let the chain try the next token
+    throw err;
+  }
+  pageTokenCache.set(key, resolved);
+  return resolved;
 }
 
 async function publishTo(account, token, imageUrl, caption) {
@@ -308,6 +328,14 @@ async function diagnoseAccount(userId, token, type = 'ig') {
       const d = dbg.data || {};
       console.log(`debug_token → type: ${d.type}, valid: ${d.is_valid}, app: ${d.application ?? '?'}`);
       console.log(`  expires: ${d.expires_at ? new Date(d.expires_at * 1000).toISOString() : 'never/unknown'}`);
+      // The 90-day data-access window is separate from token expiry: a
+      // "never expiring" token whose window lapsed silently lost /me/accounts
+      // (2026-10-28 outage). Re-authorizing the app restarts the window.
+      if (d.data_access_expires_at) {
+        const at = new Date(d.data_access_expires_at * 1000);
+        console.log(`  data access expires: ${at.toISOString()}` +
+          (at < new Date() ? '  ← LAPSED: re-authorize the app in the Graph API Explorer to restart the 90-day window' : ''));
+      }
       console.log(`  scopes: ${(d.scopes || []).join(', ') || '(none reported)'}`);
       const needed = ['instagram_basic', 'instagram_content_publish'];
       const missing = needed.filter((s) => !(d.scopes || []).includes(s));
@@ -333,6 +361,12 @@ async function diagnoseAccount(userId, token, type = 'ig') {
     } catch (err) {
       console.log(`Page id is NOT reachable: ${err.message}`);
     }
+    try {
+      const pageToken = await resolvePageToken(userId, token);
+      console.log(`Page token: OK (${pageToken === token ? 'this token is the page\'s own token' : 'derived from this user token'})`);
+    } catch (err) {
+      console.log(`Page token: NOT obtainable — ${err.message}`);
+    }
   } else if (userId) {
     try {
       const u = await graphGet(`${GRAPH}/${userId}`, { fields: 'username', access_token: token });
@@ -356,7 +390,10 @@ async function diagnoseAccount(userId, token, type = 'ig') {
         console.log(`  - Page "${p.name}" (page id ${p.id}) → ` +
           (ig ? `Instagram @${ig.username}, IG_USER_ID should be: ${ig.id}` : 'NO Instagram account linked'));
       }
-      if (!(pages.data || []).length) console.log('  (none — token lacks pages_show_list or user manages no pages)');
+      if (!(pages.data || []).length) {
+        console.log('  (none listed — missing pages_show_list, no page role, or a lapsed data-access window; ' +
+          'publishing only needs the "Page token" check above to pass)');
+      }
     } catch (err) {
       console.log(`Could not list pages: ${err.message}`);
     }
