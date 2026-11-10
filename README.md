@@ -1,45 +1,65 @@
-# LDU Auto — generador automático de posts de Instagram
+# LDU Auto
 
-Genera y publica automáticamente posts de Instagram para **Liga Deportiva
-Universitaria de Quito**: anuncio del próximo partido (con racha de los últimos
-cinco partidos de ambos equipos), resultado final de cada partido (con
-goleadores y minutos) y tabla de posiciones de la LigaPro tras cada fecha, con
-un diseño minimalista/futurista propio para cada competición (LigaPro,
-Libertadores, Sudamericana, Copa Ecuador, Supercopa Ecuador, amistosos y otras
-competiciones).
+Generación y publicación automática de posts de Instagram sobre Liga Deportiva
+Universitaria de Quito: anuncio del próximo partido, resultado final y tabla de
+posiciones de la LigaPro.
+
+![Ejemplos de posts generados: próximo partido, resultado final y tabla de posiciones](docs/ejemplos.webp)
+
+Proyecto personal y no oficial, sin relación con Liga Deportiva Universitaria, la
+LigaPro ni ESPN. Los nombres y escudos pertenecen a sus titulares.
+
+## Qué publica
+
+| Post | Contenido |
+| --- | --- |
+| Próximo partido | Rival, estadio, fecha y racha de los últimos cinco partidos de ambos equipos |
+| Resultado final | Marcador y goleadores con su minuto, incluida la definición por penales |
+| Tabla de posiciones | Tabla de la LigaPro tras cada fecha, solo cuando cambió |
+
+Cada competición tiene su propio tema visual: LigaPro, Libertadores, Sudamericana,
+Copa Ecuador, Supercopa Ecuador, amistosos y otras competiciones.
 
 ## Cómo funciona
 
-1. **Datos** — API pública de ESPN (gratuita, sin clave): fechas, estadios,
-   ciudades, logos oficiales de ambos equipos, marcadores y estado del partido,
-   en todas las competiciones configuradas ([src/config.js](src/config.js)).
-   Del resumen de cada partido salen además los goleadores con su minuto y la
-   forma reciente (últimos 5) de ambos equipos; del endpoint de standings, la
-   tabla completa de la LigaPro. ESPN no cubre la Copa Ecuador ni la Supercopa:
-   esos partidos vienen de TheSportsDB ([src/sportsdb.js](src/sportsdb.js)),
-   también gratuita y sin clave, incluida la definición por penales.
-2. **Detección de cambios** — [data/state.json](data/state.json) guarda qué se
-   anunció y qué resultados ya se publicaron. En cada ejecución solo se generan
-   posts si hay estado nuevo: un nuevo "próximo partido", un cambio de
-   fecha/hora, o un partido recién finalizado. La tabla de posiciones se
-   publica solo inmediatamente después de un resultado de LigaPro y solo si la
-   tabla cambió desde la última vez (fingerprint en el estado). Si ESPN aún no
-   actualizó la tabla, queda "debida" (`standingsOwedSince`) y se reintenta en
-   las corridas siguientes, hasta 3 días.
-3. **Render** — cada post es una plantilla HTML
-   ([src/templates/post.js](src/templates/post.js)) renderizada a PNG
-   1080×1350 con Playwright/Chromium. Tema visual por competición.
-4. **Publicación** — Instagram Graph API oficial. Las imágenes se commitean al
-   repo y se publican usando su URL pública `raw.githubusercontent.com`.
-5. **Automatización** — GitHub Actions corre dos veces por hora (min 17 y 47)
-   ([.github/workflows/ldu-posts.yml](.github/workflows/ldu-posts.yml)).
-   Como el cron de GitHub se atrasa horas, alrededor de cada partido entra la
-   **vigilancia de partido** ([src/watch.js](src/watch.js)): desde 12 h antes
-   del kickoff, el último paso dispara
-   [ldu-wakeup.yml](.github/workflows/ldu-wakeup.yml), que duerme hasta el
-   pitazo final esperado (~105 min tras el kickoff) y relanza el pipeline; luego
-   repite cada 15 min hasta que el resultado, su cola y la tabla estén
-   publicados, como máximo hasta 8 h después del kickoff.
+1. Datos. La API pública de ESPN, gratuita y sin clave, aporta fechas, estadios,
+   ciudades, escudos, marcadores y estado del partido en todas las competiciones
+   configuradas en [src/config.js](src/config.js). Del resumen de cada partido salen
+   los goleadores con su minuto y la forma reciente de ambos equipos, y del endpoint
+   de standings, la tabla completa de la LigaPro. ESPN no cubre la Copa Ecuador ni la
+   Supercopa, así que esos partidos vienen de TheSportsDB
+   ([src/sportsdb.js](src/sportsdb.js)), también gratuita y sin clave.
+2. Detección de cambios. [data/state.json](data/state.json) guarda qué se anunció y
+   qué resultados ya se publicaron. Solo se generan posts cuando hay algo nuevo: un
+   nuevo próximo partido, un cambio de fecha u hora o un partido recién terminado.
+   La tabla se publica justo después de un resultado de LigaPro y solo si cambió
+   desde la última vez. Si ESPN aún no la actualizó, queda pendiente
+   (`standingsOwedSince`) y se reintenta en las ejecuciones siguientes durante un
+   máximo de tres días.
+3. Render. Cada post es una plantilla HTML
+   ([src/templates/post.js](src/templates/post.js)) que Playwright convierte en un
+   PNG de 1080 × 1350 con Chromium.
+4. Publicación. Se usa la Instagram Graph API oficial. Las imágenes se guardan en el
+   repositorio y se publican desde su URL pública de `raw.githubusercontent.com`.
+5. Automatización. GitHub Actions ejecuta el proceso dos veces por hora, en los
+   minutos 17 y 47 ([ldu-posts.yml](.github/workflows/ldu-posts.yml)). Como el cron
+   de GitHub puede retrasarse horas, alrededor de cada partido actúa la vigilancia de
+   partido ([src/watch.js](src/watch.js)). Desde 12 horas antes del inicio, la última
+   ejecución dispara [ldu-wakeup.yml](.github/workflows/ldu-wakeup.yml), que espera
+   hasta el final previsto, unos 105 minutos después del inicio, y relanza el
+   proceso. Después repite cada 15 minutos hasta que el resultado, su cola y la
+   tabla estén publicados, como máximo hasta 8 horas después del inicio.
+
+## Tecnología
+
+| Área | Herramientas |
+| --- | --- |
+| Lenguaje | JavaScript con Node.js |
+| Datos | API pública de ESPN y TheSportsDB |
+| Render | Plantillas HTML y Playwright con Chromium |
+| Publicación | Instagram Graph API |
+| Automatización | GitHub Actions |
+| Pruebas | node:test |
 
 ## Uso local
 
@@ -47,51 +67,58 @@ competiciones).
 npm install
 npx playwright install chromium
 
-npm run samples    # renderiza demos de fixture, resultado, casos edge y tabla
-npm run generate   # pipeline real: ESPN → diff de estado → PNG + caption
+npm run samples    # renderiza ejemplos de próximo partido, resultado, casos límite y tabla
+npm run generate   # proceso real: datos de ESPN, comparación de estado, PNG y texto
+npm test           # ejecuta las pruebas
 ```
 
-Los posts quedan en `output/posts/` (PNG + caption `.txt`) y se encolan en
-`data/pending.json` hasta ser publicados.
+Los posts quedan en `output/posts/`, cada uno como imagen PNG y texto `.txt`, y se
+encolan en `data/pending.json` hasta que se publican.
 
 ## Configuración de la publicación en Instagram
 
-**Guía paso a paso (incluye soluciones a problemas de login de Meta):
-[docs/INSTAGRAM_SETUP.md](docs/INSTAGRAM_SETUP.md).**
+La guía paso a paso, con soluciones a los problemas de inicio de sesión de Meta,
+está en [docs/INSTAGRAM_SETUP.md](docs/INSTAGRAM_SETUP.md).
 
-Resumen: cuenta de Instagram **profesional** (Creator/Business) + app en
-[developers.facebook.com](https://developers.facebook.com) con el producto
-Instagram. Se soportan los dos flujos oficiales — el nuevo "Instagram login"
-(token `IGAA…`, sin página de Facebook) y el clásico via Facebook (token
-`EAA…`); el host de la Graph API se detecta automáticamente.
+Hace falta una cuenta profesional de Instagram (Creator o Business) y una app en
+[developers.facebook.com](https://developers.facebook.com) con el producto Instagram.
+Se admiten los dos flujos oficiales: el nuevo inicio de sesión de Instagram (token
+`IGAA…`, sin página de Facebook) y el clásico a través de Facebook (token `EAA…`).
+El host de la Graph API se detecta automáticamente.
 
-Secrets del repositorio (Settings → Secrets and variables → Actions):
+Secrets del repositorio, en Settings, Secrets and variables, Actions:
 
 | Secret | Valor |
 | --- | --- |
 | `IG_USER_ID` | ID de la cuenta profesional de Instagram |
 | `IG_ACCESS_TOKEN` | Token de acceso de larga duración |
 
-Variable opcional `IMAGE_BASE_URL` si prefieres servir las imágenes desde otro
-host (por defecto se usa la URL raw del propio repo — el repo debe ser
-**público** para que Instagram pueda descargar las imágenes).
+La variable opcional `IMAGE_BASE_URL` permite servir las imágenes desde otro host.
+Por defecto se usa la URL raw del propio repositorio, que por eso debe ser público
+para que Instagram pueda descargar las imágenes.
 
-Sin estos secrets el workflow sigue funcionando: genera y commitea los posts,
-y los deja en cola para publicarse cuando se configuren las credenciales.
+Sin estos secrets el workflow sigue funcionando: genera y guarda los posts y los deja
+en cola hasta que se configuren las credenciales.
 
 ## Estructura
 
 ```
 src/
-  config.js               equipo, ligas ESPN, tipos de competición y hashtags
-  espn.js                 cliente ESPN: partidos, goleadores, forma y standings
-  sportsdb.js             cliente TheSportsDB: Copa Ecuador y Supercopa (ESPN no las tiene)
+  config.js               equipo, ligas de ESPN, tipos de competición y hashtags
+  espn.js                 cliente de ESPN: partidos, goleadores, forma y tabla
+  sportsdb.js             cliente de TheSportsDB: Copa Ecuador y Supercopa
   state.js                estado persistente y planificación de posts
-  templates/post.js       plantilla HTML 1080×1350 con temas por competición
-  templates/standings.js  plantilla de la tabla de posiciones de LigaPro
-  render.js               HTML → PNG con Playwright
-  captions.js             captions en español por tipo de post y resultado
-  publish.js              publicación vía Instagram Graph API
-  samples.js              partidos de demo para previsualizar diseños
-  index.js                orquestador (generate | publish | cleanup | samples)
+  watch.js                vigilancia del día de partido
+  outcome.js              ganador de cada partido, compartido por imagen y texto
+  templates/post.js       plantilla HTML de 1080 × 1350 con temas por competición
+  templates/standings.js  plantilla de la tabla de posiciones de la LigaPro
+  render.js               conversión de HTML a PNG con Playwright
+  captions.js             textos en español por tipo de post y resultado
+  publish.js              publicación con la Instagram Graph API
+  cleanup.js              borrado de posts antiguos según un periodo de retención
+  samples.js              partidos de ejemplo para previsualizar diseños
+  index.js                orquestador: generate, publish, cleanup y samples
+test/                     pruebas con node:test
+docs/                     guía de Instagram e investigación previa
+.github/workflows/        publicación, vigilancia de partido, renovación del token y diagnóstico
 ```
