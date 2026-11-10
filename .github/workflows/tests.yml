@@ -1,0 +1,26 @@
+name: Tests
+
+# Runs the test suite when code changes. The posting bot's own commits only
+# touch data/ and output/, so they do not trigger it.
+on:
+  push:
+    branches: [main]
+    paths: ['src/**', 'test/**', 'package.json', 'package-lock.json', '.github/workflows/tests.yml']
+  pull_request:
+    paths: ['src/**', 'test/**', 'package.json', 'package-lock.json', '.github/workflows/tests.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test

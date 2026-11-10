@@ -1,5 +1,7 @@
 # LDU Auto
 
+[![Tests](https://github.com/danilomonge/LDU_auto/actions/workflows/tests.yml/badge.svg)](https://github.com/danilomonge/LDU_auto/actions/workflows/tests.yml)
+
 Generación y publicación automática de posts de Instagram sobre Liga Deportiva
 Universitaria de Quito: anuncio del próximo partido, resultado final y tabla de
 posiciones de la LigaPro.
